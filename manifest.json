@@ -13,7 +13,7 @@
         "changelog": "Filters the combined Continue Watching / Next Up home row, which 1.0.0.0 missed: the Continue Watching endpoints and any Home Screen Sections section are now covered, not just /Shows/NextUp. On a combined row only untouched first episodes are hidden, so an episode you are part-way through never disappears. Routes behind a reverse proxy base path are matched too, and every filtered row is logged at debug level.",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.0.0.1/nextup-cleanup_1.0.0.1.zip",
-        "checksum": "PENDING",
+        "checksum": "54375c5568c53f8dc7cf3a25f4d3e433",
         "timestamp": "2026-08-03T15:00:00Z"
       },
       {
