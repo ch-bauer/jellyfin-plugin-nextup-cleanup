@@ -1,0 +1,21 @@
+[
+  {
+    "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
+    "name": "Next Up Cleanup",
+    "description": "Clears the first episodes of never-started series out of Next Up, so the row only holds shows you are actually watching. Filters the server's response, changes no watch data.",
+    "overview": "Next Up without the first episode of every show you never started.",
+    "owner": "Christian",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release: filters the first episodes of never-started series out of Next Up, on every client, without touching any watch data. Two modes - hide every S01E01, or keep the ones that already have a resume position or a play date. Requests are over-fetched and trimmed so the row stays as long as the client asked for.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.0.0.0/nextup-cleanup_1.0.0.0.zip",
+        "checksum": "PENDING",
+        "timestamp": "2026-08-03T00:00:00Z"
+      }
+    ]
+  }
+]

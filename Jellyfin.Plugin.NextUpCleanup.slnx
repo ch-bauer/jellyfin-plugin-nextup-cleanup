@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jellyfin.Plugin.NextUpCleanup.Tests/Jellyfin.Plugin.NextUpCleanup.Tests.csproj" />
+  </Folder>
+  <Project Path="src/Jellyfin.Plugin.NextUpCleanup/Jellyfin.Plugin.NextUpCleanup.csproj" />
+</Solution>

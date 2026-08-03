@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Next Up Cleanup</title>
+</head>
+<body>
+<div id="NextUpCleanupConfigPage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox,emby-select">
+
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="NextUpCleanupConfigForm">
+                <h2>Next Up Cleanup</h2>
+                <p style="opacity:0.8;">
+                    Since 10.11 the Next Up row also holds the first episode of every series
+                    you never started. This filters those entries out of the server's response,
+                    on every client. No watch data is changed &mdash; switch the plugin off and
+                    the row is back to normal.
+                </p>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input is="emby-checkbox" type="checkbox" id="Enabled" />
+                        <span>Enable filtering</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        When off, the plugin is a pass-through and no response is touched.
+                    </div>
+                </div>
+
+                <div class="selectContainer">
+                    <label class="selectLabel" for="Mode">What to hide</label>
+                    <select is="emby-select" id="Mode" class="emby-select-withcolor emby-select">
+                        <option value="0">Every first episode</option>
+                        <option value="1">Only untouched first episodes</option>
+                    </select>
+                    <div class="fieldDescription">
+                        <em>Every first episode</em> removes all S01E01 entries, without exception &mdash;
+                        including one you happen to be part-way through.
+                        <em>Only untouched</em> keeps a first episode that has a resume position,
+                        a play count or a played date, and hides the rest.
+                    </div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="OverfetchMultiplier">
+                        Over-fetch multiplier
+                    </label>
+                    <input is="emby-input" type="number" id="OverfetchMultiplier" min="1" max="10" />
+                    <div class="fieldDescription">
+                        The server applies the client's row length before this plugin removes
+                        anything, so a 20-item row would come back short. Asking for this many
+                        times as many rows keeps it full. 1 disables over-fetching.
+                    </div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="MaxOverfetchLimit">
+                        Over-fetch ceiling
+                    </label>
+                    <input is="emby-input" type="number" id="MaxOverfetchLimit" min="10" max="1000" />
+                    <div class="fieldDescription">
+                        Upper bound on the inflated row length, so a client asking for a long
+                        row cannot turn into a very expensive query.
+                    </div>
+                </div>
+
+                <div>
+                    <button is="emby-button" type="submit" class="raised button-submit block">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            var pluginUniqueId = "64c04809-0078-401f-a883-2fc0fddace8c";
+
+            function loadConfig(page) {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                    page.querySelector('#Enabled').checked = config.Enabled !== false;
+                    page.querySelector('#Mode').value = String(config.Mode || 0);
+                    page.querySelector('#OverfetchMultiplier').value = config.OverfetchMultiplier || 3;
+                    page.querySelector('#MaxOverfetchLimit').value = config.MaxOverfetchLimit || 150;
+                    Dashboard.hideLoadingMsg();
+                });
+            }
+
+            function saveConfig(e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                var page = document.querySelector('#NextUpCleanupConfigPage');
+
+                ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                    config.Enabled = page.querySelector('#Enabled').checked;
+                    config.Mode = parseInt(page.querySelector('#Mode').value, 10) || 0;
+                    config.OverfetchMultiplier = parseInt(page.querySelector('#OverfetchMultiplier').value, 10) || 1;
+                    config.MaxOverfetchLimit = parseInt(page.querySelector('#MaxOverfetchLimit').value, 10) || 150;
+
+                    ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    });
+                });
+
+                return false;
+            }
+
+            document.querySelector('#NextUpCleanupConfigPage')
+                .addEventListener('pageshow', function () {
+                    loadConfig(this);
+                });
+
+            document.querySelector('#NextUpCleanupConfigForm')
+                .addEventListener('submit', saveConfig);
+        })();
+    </script>
+</div>
+</body>
+</html>
