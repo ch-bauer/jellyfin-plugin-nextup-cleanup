@@ -13,7 +13,7 @@
         "changelog": "Initial release: filters the first episodes of never-started series out of Next Up, on every client, without touching any watch data. Two modes - hide every S01E01, or keep the ones that already have a resume position or a play date. Requests are over-fetched and trimmed so the row stays as long as the client asked for.",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.0.0.0/nextup-cleanup_1.0.0.0.zip",
-        "checksum": "PENDING",
+        "checksum": "d77ff9089725c251c75e1adbb6fe26df",
         "timestamp": "2026-08-03T00:00:00Z"
       }
     ]
