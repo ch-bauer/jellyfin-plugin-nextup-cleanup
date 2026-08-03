@@ -10,6 +10,24 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.NextUpCleanup.Middleware;
 
 /// <summary>
+/// What kind of row an endpoint serves.
+/// </summary>
+internal enum EndpointKind
+{
+    /// <summary>Not a row this plugin touches.</summary>
+    None = 0,
+
+    /// <summary>A pure Next Up row.</summary>
+    NextUp = 1,
+
+    /// <summary>
+    /// A row that mixes Next Up with Continue Watching, so it legitimately contains
+    /// episodes the user is part-way through.
+    /// </summary>
+    Mixed = 2
+}
+
+/// <summary>
 /// Intercepts Next Up responses and strips the first-episode entries that Jellyfin
 /// 10.11 surfaces for series you never started — a side effect of jellyfin/jellyfin#13687,
 /// which has no server-side setting to turn off. Nothing is written to the database:
@@ -32,12 +50,15 @@ internal sealed class NextUpFilterMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var config = Plugin.Instance?.Configuration;
+        var kind = ClassifyEndpoint(context.Request.Path.Value);
 
-        if (config is null || !config.Enabled || !IsNextUpEndpoint(context.Request.Path.Value))
+        if (config is null || !config.Enabled || kind == EndpointKind.None)
         {
             await _next(context).ConfigureAwait(false);
             return;
         }
+
+        var mode = EffectiveMode(config, kind);
 
         var requestedLimit = OverfetchRequest(context, config);
 
@@ -83,7 +104,7 @@ internal sealed class NextUpFilterMiddleware
             int hidden;
             try
             {
-                filtered = NextUpFilter.Apply(json, config, requestedLimit, out hidden);
+                filtered = NextUpFilter.Apply(json, mode, requestedLimit, out hidden);
             }
             catch (Exception ex)
             {
@@ -92,10 +113,15 @@ internal sealed class NextUpFilterMiddleware
                 return;
             }
 
-            if (hidden > 0)
-            {
-                _logger.LogDebug("Next Up: hid {Hidden} first-episode entr(ies) on {Path}", hidden, context.Request.Path);
-            }
+            // Both halves are logged: "matched but hid nothing" is the answer to
+            // "why is the row still full of S01E01", and silence means the row is
+            // being served by an endpoint ClassifyEndpoint does not know about.
+            _logger.LogDebug(
+                "Next Up: hid {Hidden} first-episode entr(ies) on {Path} ({Kind}, mode {Mode})",
+                hidden,
+                context.Request.Path,
+                kind,
+                mode);
 
             var bytes = Encoding.UTF8.GetBytes(filtered);
             if (!string.IsNullOrEmpty(encoding))
@@ -115,31 +141,66 @@ internal sealed class NextUpFilterMiddleware
 
     /// <summary>
     /// Matches the endpoints that serve a Next Up row.
+    /// <para>
+    /// Matching is done on the trailing segments, so a base path left in front of the
+    /// route by a reverse proxy (<c>/jellyfin/Shows/NextUp</c>) still matches.
+    /// </para>
     /// </summary>
-    internal static bool IsNextUpEndpoint(string? path)
+    internal static EndpointKind ClassifyEndpoint(string? path)
     {
-        var parts = (path ?? string.Empty).Trim('/').Split('/');
+        var parts = (path ?? string.Empty).Split('/', StringSplitOptions.RemoveEmptyEntries);
 
         // /Shows/NextUp — every stock client.
-        if (parts.Length == 2
-            && parts[0].Equals("Shows", StringComparison.OrdinalIgnoreCase)
-            && parts[1].Equals("NextUp", StringComparison.OrdinalIgnoreCase))
+        if (EndsWith(parts, "Shows", "NextUp"))
         {
-            return true;
+            return EndpointKind.NextUp;
         }
 
-        // /HomeScreen/Section/NextUp — the Home Screen Sections plugin and Jellyfin
-        // Enhanced serve their own home rows and never touch /Shows/NextUp.
-        if (parts.Length == 3
-            && parts[0].Equals("HomeScreen", StringComparison.OrdinalIgnoreCase)
-            && parts[1].Equals("Section", StringComparison.OrdinalIgnoreCase)
-            && parts[2].StartsWith("NextUp", StringComparison.OrdinalIgnoreCase))
+        // /HomeScreen/Section/{id} — the Home Screen Sections plugin and Jellyfin Enhanced
+        // build their rows in process, so /Shows/NextUp never sees the request. The section
+        // id is whatever the section was registered as, and a combined Continue Watching /
+        // Next Up row is not called "NextUp", so match on what the id mentions. Sections
+        // that are neither (Latest Media, My Media, Live TV) are left alone: a newly added
+        // S01E01 belongs in those.
+        if (parts.Length >= 3
+            && Is(parts[^3], "HomeScreen")
+            && Is(parts[^2], "Section"))
         {
-            return true;
+            var section = parts[^1];
+
+            if (Mentions(section, "Resume") || Mentions(section, "Continue"))
+            {
+                return EndpointKind.Mixed;
+            }
+
+            return Mentions(section, "NextUp") ? EndpointKind.NextUp : EndpointKind.None;
         }
 
-        return false;
+        // /UserItems/Resume and the older /Users/{id}/Items/Resume — the Continue Watching
+        // row. In 10.11 the web client merges Next Up into it, so the flood lands here too.
+        if (EndsWith(parts, "UserItems", "Resume") || EndsWith(parts, "Items", "Resume"))
+        {
+            return EndpointKind.Mixed;
+        }
+
+        return EndpointKind.None;
     }
+
+    private static bool EndsWith(string[] parts, string first, string second)
+        => parts.Length >= 2 && Is(parts[^2], first) && Is(parts[^1], second);
+
+    private static bool Is(string part, string value)
+        => part.Equals(value, StringComparison.OrdinalIgnoreCase);
+
+    private static bool Mentions(string part, string value)
+        => part.Contains(value, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A row that is genuinely in progress must not lose an episode, so the blunt
+    /// "hide every S01E01" mode is not applied to rows that carry resumable items.
+    /// </summary>
+    private static FilterMode EffectiveMode(PluginConfiguration config, EndpointKind kind)
+        => kind == EndpointKind.Mixed ? FilterMode.UntouchedFirstEpisodes : config.Mode;
 
     /// <summary>
     /// Rewrites the inbound query so the server returns more rows than the client asked

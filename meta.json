@@ -1,6 +1,6 @@
 {
   "category": "General",
-  "changelog": "Initial release: filters the first episodes of never-started series out of Next Up, on every client, without touching any watch data. Two modes - hide every S01E01, or keep the ones that already have a resume position or a play date. Requests are over-fetched and trimmed so the row stays as long as the client asked for.",
+  "changelog": "Filters the combined Continue Watching / Next Up home row, which 1.0.0.0 missed: the Continue Watching endpoints and any Home Screen Sections section are now covered, not just /Shows/NextUp. On a combined row only untouched first episodes are hidden, so an episode you are part-way through never disappears. Routes behind a reverse proxy base path are matched too, and every filtered row is logged at debug level.",
   "description": "Clears the first episodes of never-started series out of Next Up, so the row only holds shows you are actually watching. Filters the server's response, changes no watch data.",
   "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
   "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
@@ -8,8 +8,8 @@
   "overview": "Next Up without the first episode of every show you never started.",
   "owner": "Christian",
   "targetAbi": "10.11.0.0",
-  "timestamp": "2026-08-03T00:00:00.000Z",
-  "version": "1.0.0.0",
+  "timestamp": "2026-08-03T15:00:00.000Z",
+  "version": "1.0.0.1",
   "status": "Active",
   "autoUpdate": false
 }

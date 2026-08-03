@@ -30,7 +30,7 @@ public class NextUpFilterTests
             Episode(3, 4, "Real"),
             Episode(1, 1, "AlsoBogus"));
 
-        var result = NextUpFilter.Apply(json, new PluginConfiguration(), null, out var hidden);
+        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
 
         Assert.Equal(2, hidden);
         Assert.Equal(new[] { "Real" }, Names(result));
@@ -41,7 +41,7 @@ public class NextUpFilterTests
     {
         var json = Body(Episode(1, 2, "S01E02"), Episode(1, 12, "S01E12"));
 
-        var result = NextUpFilter.Apply(json, new PluginConfiguration(), null, out var hidden);
+        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
 
         Assert.Equal(0, hidden);
         Assert.Equal(json, result);
@@ -53,7 +53,7 @@ public class NextUpFilterTests
         // S02E01 is a legitimate next up: it means season one is finished.
         var json = Body(Episode(2, 1, "S02E01"));
 
-        NextUpFilter.Apply(json, new PluginConfiguration(), null, out var hidden);
+        NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
 
         Assert.Equal(0, hidden);
     }
@@ -63,7 +63,7 @@ public class NextUpFilterTests
     {
         var json = "{\"Items\":[{\"Name\":\"A Film\",\"Type\":\"Movie\",\"ParentIndexNumber\":1,\"IndexNumber\":1}],\"TotalRecordCount\":1}";
 
-        NextUpFilter.Apply(json, new PluginConfiguration(), null, out var hidden);
+        NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
 
         Assert.Equal(0, hidden);
     }
@@ -75,10 +75,9 @@ public class NextUpFilterTests
     [InlineData("{\"LastPlayedDate\":\"2026-07-01T20:00:00.0000000Z\"}")]
     public void UntouchedMode_KeepsAFirstEpisodeWithPlayState(string userData)
     {
-        var config = new PluginConfiguration { Mode = FilterMode.UntouchedFirstEpisodes };
         var json = Body(Episode(1, 1, "Started", userData));
 
-        NextUpFilter.Apply(json, config, null, out var hidden);
+        NextUpFilter.Apply(json, FilterMode.UntouchedFirstEpisodes, null, out var hidden);
 
         Assert.Equal(0, hidden);
     }
@@ -86,12 +85,11 @@ public class NextUpFilterTests
     [Fact]
     public void UntouchedMode_HidesAFirstEpisodeWithoutPlayState()
     {
-        var config = new PluginConfiguration { Mode = FilterMode.UntouchedFirstEpisodes };
         var json = Body(
             Episode(1, 1, "Never", "{\"PlaybackPositionTicks\":0,\"PlayCount\":0,\"Played\":false}"),
             Episode(1, 1, "NoUserData"));
 
-        NextUpFilter.Apply(json, config, null, out var hidden);
+        NextUpFilter.Apply(json, FilterMode.UntouchedFirstEpisodes, null, out var hidden);
 
         Assert.Equal(2, hidden);
     }
@@ -108,7 +106,7 @@ public class NextUpFilterTests
             Episode(8, 9, "D"),
             Episode(1, 1, "Bogus2"));
 
-        var result = NextUpFilter.Apply(json, new PluginConfiguration(), 2, out var hidden);
+        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, 2, out var hidden);
 
         Assert.Equal(new[] { "A", "B" }, Names(result));
         Assert.Equal(1, hidden); // only the one seen before the page filled up
@@ -119,7 +117,7 @@ public class NextUpFilterTests
     {
         var json = Body(Episode(1, 1, "Bogus"), Episode(2, 1, "Keep"));
 
-        var result = NextUpFilter.Apply(json, new PluginConfiguration(), null, out _);
+        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out _);
 
         Assert.Equal(1, Total(result));
         Assert.Single(Names(result));
@@ -130,7 +128,7 @@ public class NextUpFilterTests
     {
         var json = Body(Episode(5, 5, "Keep"));
 
-        Assert.Same(json, NextUpFilter.Apply(json, new PluginConfiguration(), null, out _));
+        Assert.Same(json, NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out _));
     }
 
     [Fact]
@@ -138,19 +136,26 @@ public class NextUpFilterTests
     {
         const string Json = "{\"Items\":[],\"TotalRecordCount\":0}";
 
-        Assert.Same(Json, NextUpFilter.Apply(Json, new PluginConfiguration(), null, out var hidden));
+        Assert.Same(Json, NextUpFilter.Apply(Json, FilterMode.AllFirstEpisodes, null, out var hidden));
         Assert.Equal(0, hidden);
     }
 
     [Theory]
-    [InlineData("/Shows/NextUp", true)]
-    [InlineData("/shows/nextup", true)]
-    [InlineData("/HomeScreen/Section/NextUp", true)]
-    [InlineData("/HomeScreen/Section/NextUpEnhanced", true)]
-    [InlineData("/Shows/Upcoming", false)]
-    [InlineData("/Users/abc/Items/Resume", false)]
-    [InlineData("/Shows/NextUp/Extra", false)]
-    [InlineData("", false)]
-    public void RecognisesTheNextUpEndpoints(string path, bool expected)
-        => Assert.Equal(expected, NextUpFilterMiddleware.IsNextUpEndpoint(path));
+    [InlineData("/Shows/NextUp", EndpointKind.NextUp)]
+    [InlineData("/shows/nextup", EndpointKind.NextUp)]
+    [InlineData("/jellyfin/Shows/NextUp", EndpointKind.NextUp)] // base path left on by a proxy
+    [InlineData("/HomeScreen/Section/NextUp", EndpointKind.NextUp)]
+    [InlineData("/HomeScreen/Section/NextUpEnhanced", EndpointKind.NextUp)]
+    [InlineData("/HomeScreen/Section/ContinueWatching", EndpointKind.Mixed)]
+    [InlineData("/HomeScreen/Section/ResumeItems", EndpointKind.Mixed)]
+    [InlineData("/HomeScreen/Section/LatestMedia", EndpointKind.None)]
+    [InlineData("/HomeScreen/Section/MyMedia", EndpointKind.None)]
+    [InlineData("/UserItems/Resume", EndpointKind.Mixed)]
+    [InlineData("/Users/abc/Items/Resume", EndpointKind.Mixed)]
+    [InlineData("/Shows/Upcoming", EndpointKind.None)]
+    [InlineData("/Users/abc/Items/Latest", EndpointKind.None)]
+    [InlineData("/Shows/NextUp/Extra", EndpointKind.None)]
+    [InlineData("", EndpointKind.None)]
+    internal void RecognisesTheRowEndpoints(string path, EndpointKind expected)
+        => Assert.Equal(expected, NextUpFilterMiddleware.ClassifyEndpoint(path));
 }

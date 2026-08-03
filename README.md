@@ -22,8 +22,20 @@ plugin does.
 
 ## How it works
 
-- Middleware in front of `/Shows/NextUp` — and `/HomeScreen/Section/NextUp*`, for the
-  Home Screen Sections plugin and Jellyfin Enhanced, which serve their own home rows.
+- Middleware in front of every endpoint that can serve a Next Up row:
+  - `/Shows/NextUp` — every stock client.
+  - `/HomeScreen/Section/{id}` — the Home Screen Sections plugin and Jellyfin Enhanced
+    build their rows in process, so `/Shows/NextUp` never sees the request. Sections whose
+    id mentions Next Up, Resume or Continue are filtered; Latest Media, My Media and Live
+    TV are left alone, since a newly added `S01E01` belongs in those.
+  - `/UserItems/Resume` and `/Users/{id}/Items/Resume` — the Continue Watching row, which
+    the 10.11 web client merges Next Up into.
+
+  A base path left in front of the route by a reverse proxy (`/jellyfin/Shows/NextUp`)
+  still matches.
+- On a combined **Continue Watching / Next Up** row, *Every first episode* is narrowed to
+  *Only untouched first episodes* — an episode you are genuinely part-way through is never
+  taken out of Continue Watching, whichever mode is configured.
 - Episodes with season 1, episode 1 are dropped from the response. `S02E01` stays: that
   one means you finished season one.
 - The server applies the client's row length *before* the plugin removes anything, so a
@@ -56,6 +68,18 @@ Dashboard → Plugins → Next Up Cleanup.
 2. Install **Next Up Cleanup** from the catalog and restart Jellyfin.
 
 Requires Jellyfin **10.11**.
+
+## A row is still full of first episodes
+
+Turn on debug logging (Dashboard → Logs, or `"Jellyfin.Plugin.NextUpCleanup": "Debug"` in
+`logging.json`) and reload the home screen. Every row the plugin touched logs one line
+with the path it matched and how many entries it hid.
+
+- **A line with `hid 0`** — the plugin saw the row and there was nothing matching `S01E01`
+  in it, or the mode is *Only untouched first episodes* and the entries have play state.
+- **No line at all** — the row is served by an endpoint the plugin does not know about.
+  Open the browser dev tools, reload the home screen, and check the Network tab for the
+  request behind that row; the path in it is what needs adding.
 
 ## Building
 

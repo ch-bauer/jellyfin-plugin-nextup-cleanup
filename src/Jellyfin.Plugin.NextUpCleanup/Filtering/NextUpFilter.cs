@@ -14,14 +14,17 @@ internal static class NextUpFilter
     /// Removes first-episode entries from a <c>QueryResult</c> body.
     /// </summary>
     /// <param name="json">The response body.</param>
-    /// <param name="config">The current plugin configuration.</param>
+    /// <param name="mode">
+    /// Which first episodes to hide. This is the configured mode for a pure Next Up row,
+    /// but the caller narrows it for rows that also carry Continue Watching entries.
+    /// </param>
     /// <param name="requestedLimit">
     /// The limit the client originally asked for, when the request was over-fetched.
     /// The result is trimmed back to it. Null leaves the page length alone.
     /// </param>
     /// <param name="hidden">How many entries were removed.</param>
     /// <returns>The rewritten body, or <paramref name="json"/> unchanged if nothing was hidden.</returns>
-    public static string Apply(string json, PluginConfiguration config, int? requestedLimit, out int hidden)
+    public static string Apply(string json, FilterMode mode, int? requestedLimit, out int hidden)
     {
         hidden = 0;
 
@@ -42,7 +45,7 @@ internal static class NextUpFilter
                 continue;
             }
 
-            if (ShouldHide(item, config))
+            if (ShouldHide(item, mode))
             {
                 removed++;
                 continue;
@@ -82,7 +85,7 @@ internal static class NextUpFilter
         return root.ToJsonString();
     }
 
-    private static bool ShouldHide(JsonNode item, PluginConfiguration config)
+    private static bool ShouldHide(JsonNode item, FilterMode mode)
     {
         if (!string.Equals(item["Type"]?.GetValue<string>(), "Episode", StringComparison.OrdinalIgnoreCase))
         {
@@ -94,7 +97,7 @@ internal static class NextUpFilter
             return false;
         }
 
-        return config.Mode switch
+        return mode switch
         {
             FilterMode.UntouchedFirstEpisodes => !HasPlayState(item),
             _ => true
