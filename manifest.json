@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
     "versions": [
       {
+        "version": "1.2.0.1",
+        "changelog": "Fixes the Reset abandoned episodes task failing immediately on Jellyfin 10.11.11 with a MissingMethodException. IUserManager.Users was a property up to 10.11.3 and is a GetUsers() method from 10.11.11, so one plugin binary cannot bind to either at compile time and still run on both halves of the 10.11 series. The user list is now asked for in whichever way the running server offers it. Filtering was never affected.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.2.0.1/nextup-cleanup_1.2.0.1.zip",
+        "checksum": "b718cfa686e63f659a09c6deefc44bd8",
+        "timestamp": "2026-08-11T17:00:00Z"
+      },
+      {
         "version": "1.2.0.0",
         "changelog": "Adds a threshold under which an episode counts as never started. Jellyfin writes a resume position, a play count and a play date on the very first frame, so a mis-tap or a stopped auto-play was enough to pin an episode to a row for good. An episode now counts as watched only if it is marked played or its resume position is past the mark - five minutes by default, configurable. A bare play count or play date no longer counts for anything. Also new: an opt-in Reset abandoned episodes scheduled task that clears the play state of episodes stopped before a second, lower mark (two minutes by default), for tidying the database behind the rows. It skips anything marked played, deletes watch data, cannot be undone, and never runs unless you start it by hand.",
         "targetAbi": "10.11.0.0",
