@@ -45,17 +45,20 @@ clients use, and the legacy spelling of a route all match on their own:
 
 The Home Screen Sections plugin builds its rows in process and serves every one of them
 from that single action, so `/Shows/NextUp` never sees the request; which row it is comes
-from the section id. Sections that mention Next Up, Resume or Continue are filtered, and
-Latest Media, My Media and Live TV are left alone, since a newly added `S01E01` belongs
-in those.
+from the section id. Sections that mention Next Up, Resume or Continue are filtered —
+including `ContinueWatchingNextUp`, the merged row that plugin's *combine Continue
+Watching and Next Up* option serves — and Latest Media, My Media and Live TV are left
+alone, since a newly added `S01E01` belongs in those.
 
 What the filter then does to a row:
 
 - Episodes with season 1, episode 1 are dropped. `S02E01` stays: that one means you
   finished season one.
-- On a combined **Continue Watching / Next Up** row, *Every first episode* is narrowed to
-  *Only untouched first episodes* — an episode you are genuinely part-way through is never
-  taken out of Continue Watching, whichever mode is configured.
+- On a row that also carries **Continue Watching**, an episode you are genuinely part-way
+  through is never removed, whichever mode is configured. "Part-way through" means a
+  resume position, and only that: a play count or a play date with no position on it says
+  the opposite — the episode was finished, or started and abandoned, and Jellyfin is
+  offering it again. Those are exactly the entries you wanted gone.
 - A series with several part-way-through episodes in the row is collapsed to the one you
   played most recently, decided by `LastPlayedDate` rather than by how far into an episode
   you are. The row's own order is kept; entries are only dropped, never reordered.
@@ -73,10 +76,16 @@ Dashboard → Plugins → Next Up Cleanup.
 
 - **Enable filtering** — off makes the plugin a pass-through.
 - **What to hide**
-  - *Every first episode* (default) — all `S01E01` entries, without exception, including
-    one you happen to be part-way through.
-  - *Only untouched first episodes* — keeps a first episode that has a resume position, a
-    play count, a played flag or a played date; hides the rest.
+  - *Every first episode* (default) — all `S01E01` entries, without exception. This is the
+    one that empties the row.
+  - *Only untouched first episodes* — narrower. A first episode counts as **touched**, and
+    is kept, if *any* of `PlaybackPositionTicks > 0`, `PlayCount > 0`, `Played`, or
+    `LastPlayedDate` is set. So an `S01E01` you started once and abandoned, or finished and
+    are being offered again, stays in the row; only entries with none of those four are
+    removed.
+
+  On a row that also carries Continue Watching, both modes keep any episode with a resume
+  position, so the thing you are part-way through never disappears.
 - **Over-fetch multiplier** — how much longer a row to ask the server for so it is still
   full after filtering (default 3; 1 disables it).
 - **Over-fetch ceiling** — upper bound on that inflated length (default 150).

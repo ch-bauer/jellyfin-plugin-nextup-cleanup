@@ -23,14 +23,14 @@ public class NextUpFilterTests
     [InlineData(1, 12, false)]
     [InlineData(2, 1, false)] // S02E01 means you finished season one
     public void HidesOnlyTheFirstEpisodeOfTheFirstSeason(int season, int number, bool hidden)
-        => Assert.Equal(hidden, NextUpFilter.ShouldHide(Episode(season, number), FilterMode.AllFirstEpisodes));
+        => Assert.Equal(hidden, NextUpFilter.ShouldHide(Episode(season, number), FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
 
     [Fact]
     public void LeavesNonEpisodesAlone()
     {
         var movie = new BaseItemDto { Type = BaseItemKind.Movie, ParentIndexNumber = 1, IndexNumber = 1 };
 
-        Assert.False(NextUpFilter.ShouldHide(movie, FilterMode.AllFirstEpisodes));
+        Assert.False(NextUpFilter.ShouldHide(movie, FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
     }
 
     [Fact]
@@ -38,12 +38,12 @@ public class NextUpFilterTests
     {
         var unnumbered = new BaseItemDto { Type = BaseItemKind.Episode };
 
-        Assert.False(NextUpFilter.ShouldHide(unnumbered, FilterMode.AllFirstEpisodes));
+        Assert.False(NextUpFilter.ShouldHide(unnumbered, FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
     }
 
     [Fact]
     public void AllMode_HidesAFirstEpisodeEvenWhenItHasPlayState()
-        => Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched(ticks: 123456)), FilterMode.AllFirstEpisodes));
+        => Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched(ticks: 123456)), FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
 
     public static TheoryData<UserItemDataDto> PlayState => new()
     {
@@ -70,13 +70,13 @@ public class NextUpFilterTests
     [Theory]
     [MemberData(nameof(PlayState))]
     public void UntouchedMode_KeepsAFirstEpisodeWithPlayState(UserItemDataDto userData)
-        => Assert.False(NextUpFilter.ShouldHide(Episode(1, 1, userData), FilterMode.UntouchedFirstEpisodes));
+        => Assert.False(NextUpFilter.ShouldHide(Episode(1, 1, userData), FilterMode.UntouchedFirstEpisodes, EndpointKind.NextUp));
 
     [Fact]
     public void UntouchedMode_HidesAFirstEpisodeWithoutPlayState()
     {
-        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched()), FilterMode.UntouchedFirstEpisodes));
-        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1), FilterMode.UntouchedFirstEpisodes));
+        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched()), FilterMode.UntouchedFirstEpisodes, EndpointKind.NextUp));
+        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1), FilterMode.UntouchedFirstEpisodes, EndpointKind.NextUp));
     }
 
     [Theory]
@@ -222,13 +222,51 @@ public class NextUpFilterTests
         Assert.Equal(2, NextUpFilter.Deduplicate(row, new PluginConfiguration { DeduplicateMovies = true }).Count);
     }
 
+    [Fact]
+    internal void ACombinedRowKeepsAnEpisodeYouArePartWayThrough()
+    {
+        // The one guarantee a Continue Watching row has to make, in either mode.
+        var resuming = Episode(1, 1, Watched(ticks: 5_000_000, playCount: 1));
+
+        Assert.False(NextUpFilter.ShouldHide(resuming, FilterMode.AllFirstEpisodes, EndpointKind.Mixed));
+        Assert.False(NextUpFilter.ShouldHide(resuming, FilterMode.UntouchedFirstEpisodes, EndpointKind.Mixed));
+    }
+
+    [Fact]
+    internal void ACombinedRowStillHidesAFirstEpisodeYouAreNotPartWayThrough()
+    {
+        // The real case from a merged "Weiter ansehen / Als Nächstes" row: a play count
+        // and a play date, but no resume position — started and abandoned, or finished and
+        // being offered again. Nothing about that is "carry on where you left off".
+        var abandoned = Episode(1, 1, Watched(
+            playCount: 1,
+            lastPlayed: new DateTime(2026, 8, 11, 15, 27, 31, DateTimeKind.Utc)));
+
+        Assert.True(NextUpFilter.ShouldHide(abandoned, FilterMode.AllFirstEpisodes, EndpointKind.Mixed));
+
+        // A watched-through rewatch suggestion is the same story.
+        Assert.True(NextUpFilter.ShouldHide(
+            Episode(1, 1, Watched(playCount: 3, played: true)),
+            FilterMode.AllFirstEpisodes,
+            EndpointKind.Mixed));
+    }
+
+    [Fact]
+    internal void UntouchedModeStillProtectsPlayStateOnACombinedRow()
+    {
+        // The configured mode keeps meaning what the setting says it means; the combined
+        // row only ever adds the resume-position guarantee on top.
+        Assert.False(NextUpFilter.ShouldHide(
+            Episode(1, 1, Watched(playCount: 1)),
+            FilterMode.UntouchedFirstEpisodes,
+            EndpointKind.Mixed));
+    }
+
     [Theory]
-    [InlineData(EndpointKind.NextUp, FilterMode.AllFirstEpisodes, FilterMode.AllFirstEpisodes)]
-    [InlineData(EndpointKind.NextUp, FilterMode.UntouchedFirstEpisodes, FilterMode.UntouchedFirstEpisodes)]
-    // A row that is genuinely in progress must not lose an episode you are part-way
-    // through, whichever mode is configured.
-    [InlineData(EndpointKind.Mixed, FilterMode.AllFirstEpisodes, FilterMode.UntouchedFirstEpisodes)]
-    [InlineData(EndpointKind.Mixed, FilterMode.UntouchedFirstEpisodes, FilterMode.UntouchedFirstEpisodes)]
-    internal void NarrowsTheModeOnACombinedRow(EndpointKind kind, FilterMode configured, FilterMode expected)
-        => Assert.Equal(expected, NextUpFilter.EffectiveMode(configured, kind));
+    // The merged section the Home Screen Sections "combine Continue Watching and Next Up"
+    // option serves. It carries resumable items, so it is a combined row.
+    [InlineData("ContinueWatchingNextUp", EndpointKind.Mixed)]
+    [InlineData("NextUpContinueWatching", EndpointKind.Mixed)]
+    internal void RecognisesTheMergedSection(string section, EndpointKind expected)
+        => Assert.Equal(expected, NextUpFilter.Classify("HomeScreen", "GetSectionContent", section));
 }

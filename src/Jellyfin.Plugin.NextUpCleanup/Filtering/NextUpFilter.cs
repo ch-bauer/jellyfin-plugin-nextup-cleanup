@@ -89,18 +89,17 @@ internal static class NextUpFilter
     }
 
     /// <summary>
-    /// A row that is genuinely in progress must not lose an episode, so the blunt
-    /// "hide every S01E01" mode is not applied to rows that carry resumable items.
-    /// </summary>
-    public static FilterMode EffectiveMode(FilterMode configured, EndpointKind kind)
-        => kind == EndpointKind.Mixed ? FilterMode.UntouchedFirstEpisodes : configured;
-
-    /// <summary>
     /// True when this entry is the first episode of a first season — the thing Jellyfin
     /// 10.11 surfaces for series you never started. <c>S02E01</c> is left alone: that one
     /// means you finished season one.
     /// </summary>
-    public static bool ShouldHide(BaseItemDto item, FilterMode mode)
+    /// <param name="item">The entry.</param>
+    /// <param name="mode">The configured mode.</param>
+    /// <param name="kind">
+    /// What kind of row this is. A row that also carries Continue Watching entries gets
+    /// the resume-position guarantee below.
+    /// </param>
+    public static bool ShouldHide(BaseItemDto item, FilterMode mode, EndpointKind kind)
     {
         if (item.Type != BaseItemKind.Episode)
         {
@@ -112,12 +111,25 @@ internal static class NextUpFilter
             return false;
         }
 
+        // An episode you are genuinely part-way through is never taken out of a row that
+        // carries Continue Watching, whichever mode is configured. A resume position is
+        // what "part-way through" means, and it is the only thing that means it: a play
+        // count or a play date with no position on it says the opposite — that the episode
+        // was finished, or started and abandoned, and Jellyfin is offering it again.
+        if (kind == EndpointKind.Mixed && IsResumable(item))
+        {
+            return false;
+        }
+
         return mode switch
         {
             FilterMode.UntouchedFirstEpisodes => !HasPlayState(item),
             _ => true
         };
     }
+
+    private static bool IsResumable(BaseItemDto item)
+        => item.UserData?.PlaybackPositionTicks > 0;
 
     /// <summary>
     /// Collapses a show that appears several times in the row down to the episode you

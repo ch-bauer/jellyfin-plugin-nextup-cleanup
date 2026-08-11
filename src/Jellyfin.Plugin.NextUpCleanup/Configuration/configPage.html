@@ -34,14 +34,22 @@
                 <div class="selectContainer">
                     <label class="selectLabel" for="Mode">What to hide</label>
                     <select is="emby-select" id="Mode" class="emby-select-withcolor emby-select">
-                        <option value="0">Every first episode</option>
-                        <option value="1">Only untouched first episodes</option>
+                        <option value="AllFirstEpisodes">Every first episode</option>
+                        <option value="UntouchedFirstEpisodes">Only untouched first episodes</option>
                     </select>
                     <div class="fieldDescription">
-                        <em>Every first episode</em> removes all S01E01 entries, without exception &mdash;
-                        including one you happen to be part-way through.
-                        <em>Only untouched</em> keeps a first episode that has a resume position,
-                        a play count or a played date, and hides the rest.
+                        <em>Every first episode</em> removes all S01E01 entries, without exception.
+                        This is the one that empties the row.
+                        <br /><br />
+                        <em>Only untouched</em> is narrower: it keeps any S01E01 you have ever
+                        touched, meaning it has a resume position, a play count, a played flag
+                        or a played date &mdash; so an episode you started once and abandoned,
+                        or finished and are being offered again, stays in the row. Only entries
+                        with none of those four are removed.
+                        <br /><br />
+                        Either way, on a row that also carries Continue Watching, an episode
+                        with a resume position is never removed &mdash; you never lose the thing
+                        you are part-way through.
                     </div>
                 </div>
 
@@ -118,11 +126,23 @@
         (function () {
             var pluginUniqueId = "64c04809-0078-401f-a883-2fc0fddace8c";
 
+            // The server serialises FilterMode by name ("AllFirstEpisodes"), so the
+            // options are named too. Older saved configurations, and anything that wrote
+            // the raw number, still come back as 0 or 1 — take either.
+            var MODES = ["AllFirstEpisodes", "UntouchedFirstEpisodes"];
+
+            function modeName(value) {
+                if (typeof value === "number") {
+                    return MODES[value] || MODES[0];
+                }
+                return MODES.indexOf(value) >= 0 ? value : MODES[0];
+            }
+
             function loadConfig(page) {
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
                     page.querySelector('#Enabled').checked = config.Enabled !== false;
-                    page.querySelector('#Mode').value = String(config.Mode || 0);
+                    page.querySelector('#Mode').value = modeName(config.Mode);
                     page.querySelector('#OverfetchMultiplier').value = config.OverfetchMultiplier || 3;
                     page.querySelector('#MaxOverfetchLimit').value = config.MaxOverfetchLimit || 150;
                     page.querySelector('#DeduplicateSeries').checked = config.DeduplicateSeries !== false;
@@ -139,7 +159,7 @@
 
                 ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
                     config.Enabled = page.querySelector('#Enabled').checked;
-                    config.Mode = parseInt(page.querySelector('#Mode').value, 10) || 0;
+                    config.Mode = modeName(page.querySelector('#Mode').value);
                     config.OverfetchMultiplier = parseInt(page.querySelector('#OverfetchMultiplier').value, 10) || 1;
                     config.MaxOverfetchLimit = parseInt(page.querySelector('#MaxOverfetchLimit').value, 10) || 150;
                     config.DeduplicateSeries = page.querySelector('#DeduplicateSeries').checked;

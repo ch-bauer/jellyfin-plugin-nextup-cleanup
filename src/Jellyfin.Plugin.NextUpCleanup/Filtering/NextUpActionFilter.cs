@@ -57,14 +57,13 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
             return;
         }
 
-        var mode = NextUpFilter.EffectiveMode(config.Mode, kind);
         var requestedLimit = Overfetch(context, config);
 
         var executed = await next().ConfigureAwait(false);
 
         try
         {
-            Rewrite(executed, config, mode, requestedLimit, kind, context);
+            Rewrite(executed, config, requestedLimit, kind, context);
         }
         catch (Exception ex)
         {
@@ -76,7 +75,6 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
     private void Rewrite(
         ActionExecutedContext executed,
         PluginConfiguration config,
-        FilterMode mode,
         int? requestedLimit,
         EndpointKind kind,
         ActionExecutingContext context)
@@ -102,7 +100,7 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
         var kept = new List<BaseItemDto>(items.Count);
         foreach (var item in items)
         {
-            if (!NextUpFilter.ShouldHide(item, mode))
+            if (!NextUpFilter.ShouldHide(item, config.Mode, kind))
             {
                 kept.Add(item);
             }
@@ -132,7 +130,7 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
             context.RouteData.Values["controller"],
             context.RouteData.Values["action"],
             kind,
-            mode,
+            config.Mode,
             items.Count,
             hidden,
             duplicates,
