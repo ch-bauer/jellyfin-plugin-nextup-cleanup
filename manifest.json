@@ -9,8 +9,16 @@
     "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
     "versions": [
       {
+        "version": "1.3.0.1",
+        "changelog": "Fixes 1.3.0.0 returning HTTP 500 for the web client. That release added its toggle script by registering ASP.NET middleware through an IStartupFilter; on Jellyfin 10.11.11 a plugin doing that breaks the static-file pipeline, and every request for index.html failed with an ObjectDisposedException whether or not the toggle was switched on. The script is now added through the File Transformation plugin instead - the same mechanism Home Screen Sections and Plugin Pages use - and no middleware is registered at all. If File Transformation is not installed the toggle simply does not appear and everything else is unaffected. Anyone on 1.3.0.0 should update or roll back.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.3.0.1/nextup-cleanup_1.3.0.1.zip",
+        "checksum": "bed939fe432ae830bb1b3b52715399b9",
+        "timestamp": "2026-08-11T20:00:00Z"
+      },
+      {
         "version": "1.3.0.0",
-        "changelog": "Adds a per-series toggle to series pages in the web client, next to Play. Switching a series off removes every one of its episodes from Next Up and Continue Watching outright - episode number, play state, resume position and the started-watching mark all stop applying to it. Each user has their own list and the server reads the user from the request's own token, so switching a series off never changes what anybody else sees, and because the filtering is server-side the series is gone from those rows on every client, not just the browser it was switched off in. The button is added by a script injected into index.html at request time, so nothing is written into the web folder for a jellyfin-web update to wipe.",
+        "changelog": "DO NOT INSTALL - this build returns HTTP 500 for the web client on Jellyfin 10.11.11 and cannot be disabled from its settings. Use 1.3.0.1 or later. Adds a per-series toggle to series pages in the web client, next to Play. Switching a series off removes every one of its episodes from Next Up and Continue Watching outright - episode number, play state, resume position and the started-watching mark all stop applying to it. Each user has their own list and the server reads the user from the request's own token, so switching a series off never changes what anybody else sees, and because the filtering is server-side the series is gone from those rows on every client, not just the browser it was switched off in. The button is added by a script injected into index.html at request time, so nothing is written into the web folder for a jellyfin-web update to wipe.",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.3.0.0/nextup-cleanup_1.3.0.0.zip",
         "checksum": "fd355c469f34696f7b443c75560141d8",
