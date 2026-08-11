@@ -1,3 +1,4 @@
+using System.Collections;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
@@ -81,9 +82,10 @@ public class ResetAbandonedEpisodesTask : IScheduledTask
             return Task.CompletedTask;
         }
 
-        var users = _userManager.Users.ToList();
+        var users = GetUsers();
         if (users.Count == 0)
         {
+            _logger.LogWarning("Reset abandoned episodes: could not read the server's user list; doing nothing");
             return Task.CompletedTask;
         }
 
@@ -110,6 +112,40 @@ public class ResetAbandonedEpisodesTask : IScheduledTask
             config.ResetBelowMinutes);
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The server's users, asked for in whichever way this server offers them.
+    /// <para>
+    /// <c>IUserManager.Users</c> was a property up to 10.11.3 and is a <c>GetUsers()</c>
+    /// method from 10.11.11, so a plugin bound to either one at compile time dies with a
+    /// <c>MissingMethodException</c> on the other half of the 10.11 series. One binary has
+    /// to serve both, and reflection is the only way to ask without binding.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<User> GetUsers()
+    {
+        try
+        {
+            var type = _userManager.GetType();
+            var users = type.GetMethod("GetUsers", Type.EmptyTypes)?.Invoke(_userManager, null)
+                ?? type.GetProperty("Users")?.GetValue(_userManager);
+
+            if (users is IEnumerable enumerable)
+            {
+                return enumerable.OfType<User>().ToList();
+            }
+
+            _logger.LogWarning(
+                "Reset abandoned episodes: {Type} offers neither GetUsers() nor Users",
+                type.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Reset abandoned episodes: could not read the user list");
+        }
+
+        return Array.Empty<User>();
     }
 
     private (int Examined, int Reset) ResetForUser(

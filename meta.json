@@ -1,6 +1,6 @@
 {
   "category": "General",
-  "changelog": "Adds a threshold under which an episode counts as never started. Jellyfin writes a resume position, a play count and a play date on the very first frame, so a mis-tap or a stopped auto-play was enough to pin an episode to a row for good. An episode now counts as watched only if it is marked played or its resume position is past the mark - five minutes by default, configurable. A bare play count or play date no longer counts for anything. Also new: an opt-in Reset abandoned episodes scheduled task that clears the play state of episodes stopped before a second, lower mark (two minutes by default), for tidying the database behind the rows. It skips anything marked played, deletes watch data, cannot be undone, and never runs unless you start it by hand.",
+  "changelog": "Fixes the Reset abandoned episodes task failing immediately on Jellyfin 10.11.11 with a MissingMethodException. IUserManager.Users was a property up to 10.11.3 and is a GetUsers() method from 10.11.11, so one plugin binary cannot bind to either at compile time and still run on both halves of the 10.11 series. The user list is now asked for in whichever way the running server offers it. Filtering was never affected.",
   "description": "Clears the first episodes of never-started series out of Next Up and collapses duplicate episodes of one series in Continue Watching, so both rows only hold shows you are actually watching. Filters the server's response, changes no watch data.",
   "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
   "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
@@ -8,8 +8,8 @@
   "overview": "Next Up without the first episode of every show you never started, and Continue Watching without the same show four times.",
   "owner": "Christian",
   "targetAbi": "10.11.0.0",
-  "timestamp": "2026-08-11T16:30:00.000Z",
-  "version": "1.2.0.0",
+  "timestamp": "2026-08-11T17:00:00.000Z",
+  "version": "1.2.0.1",
   "status": "Active",
   "autoUpdate": false
 }
