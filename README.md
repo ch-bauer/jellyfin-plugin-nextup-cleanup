@@ -6,9 +6,13 @@
 Clears the first episodes of series you never started out of the **Next Up** row, and
 collapses a show that fills **Continue Watching** with half-finished episodes down to
 the one you are actually on — so both rows hold what you are watching again, on **every
-client**, because the server's response is filtered before it leaves the server. **No
-watch data is touched**: nothing is marked, reset or deleted, and switching the plugin
-off puts the rows straight back to how Jellyfin serves them.
+client**, because the filtering happens on the server before any client sees the data.
+
+**Filtering touches no watch data**: nothing is marked, reset or deleted, and switching
+the plugin off puts the rows straight back to how Jellyfin serves them. The one exception
+is the [Reset abandoned episodes](#resetting-abandoned-episodes) scheduled task, which
+does delete play state — it is opt-in, has no default trigger, and never runs unless you
+start it by hand.
 
 ## Why the row fills up in the first place
 
@@ -123,18 +127,28 @@ hand, or give it a trigger yourself if you want it periodic.
 
 Requires Jellyfin **10.11**.
 
-## A row is still full of first episodes
+## A row still has entries it should not
 
 Turn on debug logging (Dashboard → Logs, or `"Jellyfin.Plugin.NextUpCleanup": "Debug"` in
 `logging.json`) and reload the home screen. Every row the plugin touched logs one line
-with the controller and action it matched and what it removed.
+naming the controller and action it matched, the mode, and what it removed:
 
-- **A line with `hid 0`** — the plugin saw the row and there was nothing matching `S01E01`
-  in it, or the mode is *Only untouched first episodes* and the entries have play state.
+```
+Next Up: HomeScreen/GetSectionContent (Mixed, mode AllFirstEpisodes) — 4 entr(ies) in,
+hid 1 first episode(s), collapsed 2 duplicate(s), trimmed 0 over-fetched, 1 out
+```
+
+- **`hid 0 first episode(s)`** — the plugin saw the row and either nothing in it was an
+  `S01E01`, or the mode is *Only untouched first episodes* and the entry counts as
+  watched: marked played, or a resume position past the *started watching* mark. Check
+  that mark, and check the mode — this is the usual answer.
+- **An `S01E01` survives on a `Mixed` row regardless of mode** — it has a resume position
+  past the mark, and a row carrying Continue Watching never drops one of those. Lower the
+  mark, or use *Every first episode* on a pure Next Up row.
 - **A `returned N first-episode entr(ies) and is not an endpoint this plugin filters`
   line** — that controller and action is the row, and it needs adding to `Classify` in
-  `NextUpFilter.cs`. The plugin looks for this on every action it does not handle, so an
-  unknown row endpoint names itself.
+  `NextUpFilter.cs`. The plugin checks every action it does not handle, so an unknown row
+  endpoint names itself. Note this looks for first episodes only, not duplicates.
 - **No line at all** — the plugin is not loaded, or filtering is switched off.
 
 ## Building

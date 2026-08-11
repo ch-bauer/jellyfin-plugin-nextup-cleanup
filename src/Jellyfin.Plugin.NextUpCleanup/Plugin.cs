@@ -30,7 +30,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     /// <inheritdoc />
     public override string Description =>
-        "Clears the first episodes of never-started series out of Next Up, so the row only holds shows you are actually watching. Filters the server's response, changes no watch data.";
+        "Clears the first episodes of never-started series out of Next Up and collapses duplicate episodes of one series in Continue Watching, so both rows only hold shows you are actually watching. Filtering changes no watch data; an opt-in scheduled task can also clear the play state of barely-started episodes.";
 
     /// <summary>
     /// Gets the current plugin instance.
