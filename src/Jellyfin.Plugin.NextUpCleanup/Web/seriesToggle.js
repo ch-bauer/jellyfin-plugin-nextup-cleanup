@@ -128,19 +128,13 @@
             });
     }
 
-    // Position the button once and then leave it where it is. Insisting on a particular
-    // slot — "immediately before the ... button" — starts a fight with any other plugin
-    // that wants the same slot: each one shoves the other aside on its own timer and both
-    // buttons flicker. Being in the right container is all that actually matters.
+    // Append, and only once. Claiming a particular slot — "immediately before the ...
+    // button" — starts a fight with any other plugin that wants the same one: each shoves
+    // the other aside on its own timer and both buttons flicker. Going on the end instead
+    // means this never competes with Jellyfin Enhanced's buttons, however many of them are
+    // switched on, and the row simply grows by one.
     function place(button, container) {
-        if (button.parentNode === container) {
-            return;
-        }
-
-        var more = container.querySelector('.btnMoreCommands');
-        if (more) {
-            container.insertBefore(button, more);
-        } else {
+        if (button.parentNode !== container) {
             container.appendChild(button);
         }
     }
