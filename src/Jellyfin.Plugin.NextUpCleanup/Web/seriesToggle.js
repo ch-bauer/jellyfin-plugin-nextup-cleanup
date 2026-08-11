@@ -128,13 +128,21 @@
             });
     }
 
-    // Append, and only once. Claiming a particular slot — "immediately before the ...
-    // button" — starts a fight with any other plugin that wants the same one: each shoves
-    // the other aside on its own timer and both buttons flicker. Going on the end instead
-    // means this never competes with Jellyfin Enhanced's buttons, however many of them are
-    // switched on, and the row simply grows by one.
+    // Go in with the other detail buttons, ahead of the overflow ("More") button, which is
+    // where Jellyfin Enhanced puts its buttons too — but claim that position once and then
+    // never again. Re-asserting it on a timer is what makes two plugins shove each other
+    // aside several times a second; yielding the exact slot afterwards lets Jellyfin
+    // Enhanced settle wherever it likes, with any combination of its buttons enabled, and
+    // this one simply stays in the group.
     function place(button, container) {
-        if (button.parentNode !== container) {
+        if (button.parentNode === container) {
+            return;
+        }
+
+        var more = container.querySelector('.btnMoreCommands');
+        if (more) {
+            container.insertBefore(button, more);
+        } else {
             container.appendChild(button);
         }
     }

@@ -117,5 +117,10 @@ public class PluginConfiguration : BasePluginConfiguration
     /// and Continue Watching outright — no episode number, play state or threshold enters
     /// into it.
     /// </summary>
-    public Collection<ExcludedSeries> ExcludedSeries { get; } = new();
+    /// <remarks>
+    /// Settable on purpose. A get-only collection is serialised by the XML writer but
+    /// silently dropped by the dashboard's JSON configuration endpoint, so exclusions
+    /// written that way vanished without an error.
+    /// </remarks>
+    public Collection<ExcludedSeries> ExcludedSeries { get; set; } = new();
 }

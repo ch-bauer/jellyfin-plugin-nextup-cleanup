@@ -1,6 +1,6 @@
 {
   "category": "General",
-  "changelog": "Puts the series toggle on the end of the button row instead of claiming the slot before the ... button, so it sits alongside whichever Jellyfin Enhanced buttons are switched on - watchlist, random, watched, favourites, Spoiler Guard - without competing with any of them for a position. Together with 1.3.0.3 this ends the flicker where the toggle and the Spoiler Guard button swapped places several times a second. Also keys a row's exclusions to the user the row was built for rather than the caller.",
+  "changelog": "Puts the series toggle back among the detail buttons, ahead of the More button, rather than after it as 1.3.0.4 did. It claims that position once and then leaves it alone, which is what keeps it from trading places with Jellyfin Enhanced's buttons several times a second - whichever combination of those is enabled, they settle where they like and the toggle stays in the group. Also fixes switched-off series never being stored: the list was a get-only property, which the XML writer saves but the dashboard's JSON configuration endpoint silently drops, so nothing was persisted and no series was ever actually filtered.",
   "description": "Clears the first episodes of never-started series out of Next Up and collapses duplicate episodes of one series in Continue Watching, so both rows only hold shows you are actually watching. Filtering changes no watch data; an opt-in scheduled task can also clear the play state of barely-started episodes.",
   "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
   "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
@@ -8,8 +8,8 @@
   "overview": "Next Up without the first episode of every show you never started, and Continue Watching without the same show four times.",
   "owner": "Christian",
   "targetAbi": "10.11.0.0",
-  "timestamp": "2026-08-11T22:30:00.000Z",
-  "version": "1.3.0.4",
+  "timestamp": "2026-08-11T23:00:00.000Z",
+  "version": "1.3.0.5",
   "status": "Active",
   "autoUpdate": false
 }
