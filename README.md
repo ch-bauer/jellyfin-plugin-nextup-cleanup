@@ -119,11 +119,16 @@ applying to that series; it is simply not in those rows until you switch it back
 the user from the request's own token, so switching a series off never changes what anyone
 else sees.
 
-The button is added by a small script the plugin injects into the web client's
-`index.html` at request time — nothing is written into the web folder, so a jellyfin-web
-update cannot wipe it. Turning **Show the toggle on series pages** off stops the injection;
-series already switched off stay switched off, since the filtering is server-side and does
-not depend on the button.
+The button comes from a small script added to the web client's `index.html` by the
+[File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation)
+plugin — the same mechanism Home Screen Sections and Plugin Pages use, and a hard
+requirement for the button specifically. **Without File Transformation installed there is
+no button**; every other part of this plugin works regardless. Nothing is written into the
+web folder, so a jellyfin-web update cannot wipe it.
+
+Turning **Show the toggle on series pages** off stops the script being added; series
+already switched off stay switched off, since the filtering is server-side and does not
+depend on the button at all.
 
 Because the filtering is server-side, a series switched off from a browser is also gone
 from those rows on every other client — phone, TV, anything.
