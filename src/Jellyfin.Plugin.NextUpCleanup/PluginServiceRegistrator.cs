@@ -1,6 +1,7 @@
 using Jellyfin.Plugin.NextUpCleanup.Filtering;
 using Jellyfin.Plugin.NextUpCleanup.Tasks;
 using Jellyfin.Plugin.NextUpCleanup.Web;
+using Microsoft.AspNetCore.Hosting;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
@@ -20,10 +21,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NextUpActionFilter>();
 
         // index.html is a static file with no server-side hook, so the series-toggle
-        // script is added through the File Transformation plugin — the same mechanism the
-        // other home-screen plugins use. Registering it is all this does; if that plugin
-        // is absent the toggle is simply not added and filtering is unaffected.
-        serviceCollection.AddHostedService<ScriptRegistrationService>();
+        // script goes in via middleware, the way Jellyfin Enhanced does it. Registered as
+        // a singleton, deliberately: the same filter added with a transient descriptor
+        // disturbed startup enough to trip a disposed-provider bug in the File
+        // Transformation plugin, which took index.html down with it.
+        serviceCollection.AddSingleton<IStartupFilter, ScriptInjectionStartupFilter>();
 
         // The server discovers IScheduledTask across plugin assemblies itself; registering
         // the type is what lets it be constructed with its dependencies.
