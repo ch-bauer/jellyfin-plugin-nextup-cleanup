@@ -1,4 +1,7 @@
-# Next Up Cleanup for Jellyfin (Proof of Concept)
+<div align="center">
+  <img src="images/icon.png" alt="Next Up Cleanup for Jellyfin" width="128" />
+  <h1>Next Up Cleanup for Jellyfin (Proof of Concept)</h1>
+</div>
 
 Clears the first episodes of series you never started out of the **Next Up** row, and
 collapses a show that fills **Continue Watching** with half-finished episodes down to
