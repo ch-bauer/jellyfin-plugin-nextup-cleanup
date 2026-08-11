@@ -46,4 +46,23 @@ public class PluginConfiguration : BasePluginConfiguration
     /// cannot turn into a 300-row query.
     /// </summary>
     public int MaxOverfetchLimit { get; set; } = 150;
+
+    /// <summary>
+    /// Collapse a series that has several part-way-through episodes in the row
+    /// down to its most recently played one. Jellyfin lists every episode with
+    /// progress, so skipping around in one show can fill the row with it.
+    /// </summary>
+    public bool DeduplicateSeries { get; set; } = true;
+
+    /// <summary>
+    /// How many episodes of one series may stay in the row. 1 is the strict
+    /// "where I am in this show" case.
+    /// </summary>
+    public int MaxEpisodesPerSeries { get; set; } = 1;
+
+    /// <summary>
+    /// Collapse repeated movies too. Off by default: this only matters when the
+    /// same film is in the library more than once.
+    /// </summary>
+    public bool DeduplicateMovies { get; set; }
 }

@@ -1,98 +1,113 @@
-using System.Text.Json.Nodes;
+using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.NextUpCleanup.Configuration;
+using MediaBrowser.Model.Dto;
 
 namespace Jellyfin.Plugin.NextUpCleanup.Filtering;
 
 /// <summary>
-/// The pure part of the plugin: takes a Next Up response body and gives back one
-/// without the first-episode entries. No HTTP, no server state — just JSON in,
-/// JSON out, so it can be tested on its own.
+/// What kind of row an action serves.
+/// </summary>
+internal enum EndpointKind
+{
+    /// <summary>Not a row this plugin touches.</summary>
+    None = 0,
+
+    /// <summary>A pure Next Up row.</summary>
+    NextUp = 1,
+
+    /// <summary>
+    /// A row that mixes Next Up with Continue Watching, so it legitimately contains
+    /// episodes the user is part-way through.
+    /// </summary>
+    Mixed = 2
+}
+
+/// <summary>
+/// The pure part of the plugin: which actions serve a Next Up row, and which items in
+/// one are the first-episode entries to drop. No HTTP and no server state, so it can be
+/// tested on its own.
 /// </summary>
 internal static class NextUpFilter
 {
     /// <summary>
-    /// Removes first-episode entries from a <c>QueryResult</c> body.
+    /// Decides what a request is from its MVC route, rather than from the URL text.
+    /// <para>
+    /// The controller and action are what Jellyfin actually dispatched to, so this is
+    /// unaffected by a reverse-proxy base path, by the <c>/emby</c> prefix older clients
+    /// use, or by the legacy spelling of a route — <c>/Users/{id}/Items/Resume</c> and
+    /// <c>/UserItems/Resume</c> are two routes onto one controller, and both are caught
+    /// here by their action names.
+    /// </para>
     /// </summary>
-    /// <param name="json">The response body.</param>
-    /// <param name="mode">
-    /// Which first episodes to hide. This is the configured mode for a pure Next Up row,
-    /// but the caller narrows it for rows that also carry Continue Watching entries.
+    /// <param name="controller">The MVC controller name, without the "Controller" suffix.</param>
+    /// <param name="action">The MVC action name.</param>
+    /// <param name="sectionType">
+    /// The <c>sectionType</c> route value, for the Home Screen Sections plugin's single
+    /// endpoint that serves every one of its rows.
     /// </param>
-    /// <param name="requestedLimit">
-    /// The limit the client originally asked for, when the request was over-fetched.
-    /// The result is trimmed back to it. Null leaves the page length alone.
-    /// </param>
-    /// <param name="hidden">How many entries were removed.</param>
-    /// <returns>The rewritten body, or <paramref name="json"/> unchanged if nothing was hidden.</returns>
-    public static string Apply(string json, FilterMode mode, int? requestedLimit, out int hidden)
+    /// <returns>What kind of row the action serves.</returns>
+    public static EndpointKind Classify(string? controller, string? action, string? sectionType)
     {
-        hidden = 0;
-
-        var root = JsonNode.Parse(json);
-        var items = root?["Items"]?.AsArray();
-        if (root is null || items is null || items.Count == 0)
+        if (string.IsNullOrEmpty(controller) || string.IsNullOrEmpty(action))
         {
-            return json;
+            return EndpointKind.None;
         }
 
-        var kept = new JsonArray();
-        var removed = 0;
-
-        foreach (var item in items)
+        // Stock Jellyfin: /Shows/NextUp, on every client.
+        if (Is(controller, "TvShows") && Is(action, "GetNextUp"))
         {
-            if (item is null)
-            {
-                continue;
-            }
-
-            if (ShouldHide(item, mode))
-            {
-                removed++;
-                continue;
-            }
-
-            if (requestedLimit is int max && kept.Count >= max)
-            {
-                // Over-fetched surplus: not hidden, just past the client's page.
-                break;
-            }
-
-            // Nodes carry a parent, so they have to be detached before re-adding.
-            var clone = JsonNode.Parse(item.ToJsonString());
-            if (clone is not null)
-            {
-                kept.Add(clone);
-            }
+            return EndpointKind.NextUp;
         }
 
-        if (removed == 0)
+        // Stock Jellyfin: the Continue Watching row. In 10.11 the web client merges Next Up
+        // into it, so the flood lands here too. Two routes, two actions, one controller.
+        if (Is(controller, "Items") && (Is(action, "GetResumeItems") || Is(action, "GetResumeItemsLegacy")))
         {
-            return json;
+            return EndpointKind.Mixed;
         }
 
-        hidden = removed;
-
-        // The stock count came from the unfiltered query, and we can only subtract
-        // what we actually saw — so on an over-fetched page this is an estimate.
-        // It never claims fewer rows than we are returning.
-        if (root["TotalRecordCount"]?.GetValue<int>() is int total)
+        // The Home Screen Sections plugin builds its rows in process and serves all of them
+        // from one action, so /Shows/NextUp never sees the request. Which row it is is the
+        // section id. Sections that are neither Next Up nor Continue Watching (Latest Media,
+        // My Media, Live TV) are left alone: a newly added S01E01 belongs in those.
+        if (Is(controller, "HomeScreen") && Is(action, "GetSectionContent"))
         {
-            root["TotalRecordCount"] = Math.Max(kept.Count, total - removed);
+            if (string.IsNullOrEmpty(sectionType))
+            {
+                return EndpointKind.None;
+            }
+
+            if (Mentions(sectionType, "Resume") || Mentions(sectionType, "Continue"))
+            {
+                return EndpointKind.Mixed;
+            }
+
+            return Mentions(sectionType, "NextUp") ? EndpointKind.NextUp : EndpointKind.None;
         }
 
-        root["Items"] = kept;
-
-        return root.ToJsonString();
+        return EndpointKind.None;
     }
 
-    private static bool ShouldHide(JsonNode item, FilterMode mode)
+    /// <summary>
+    /// A row that is genuinely in progress must not lose an episode, so the blunt
+    /// "hide every S01E01" mode is not applied to rows that carry resumable items.
+    /// </summary>
+    public static FilterMode EffectiveMode(FilterMode configured, EndpointKind kind)
+        => kind == EndpointKind.Mixed ? FilterMode.UntouchedFirstEpisodes : configured;
+
+    /// <summary>
+    /// True when this entry is the first episode of a first season — the thing Jellyfin
+    /// 10.11 surfaces for series you never started. <c>S02E01</c> is left alone: that one
+    /// means you finished season one.
+    /// </summary>
+    public static bool ShouldHide(BaseItemDto item, FilterMode mode)
     {
-        if (!string.Equals(item["Type"]?.GetValue<string>(), "Episode", StringComparison.OrdinalIgnoreCase))
+        if (item.Type != BaseItemKind.Episode)
         {
             return false;
         }
 
-        if (item["ParentIndexNumber"]?.GetValue<int>() != 1 || item["IndexNumber"]?.GetValue<int>() != 1)
+        if (item.ParentIndexNumber != 1 || item.IndexNumber != 1)
         {
             return false;
         }
@@ -105,32 +120,132 @@ internal static class NextUpFilter
     }
 
     /// <summary>
+    /// Collapses a show that appears several times in the row down to the episode you
+    /// are furthest along in.
+    /// <para>
+    /// Jellyfin lists every episode that has progress on it, so skipping around in one
+    /// series — or pausing a few episodes of it — fills the row with that one show. Which
+    /// episode wins is decided by <c>LastPlayedDate</c> rather than by how far into the
+    /// episode you are, so it is the one you actually watched most recently. An entry with
+    /// no play date at all ranks last, since there is nothing to say it is the current one.
+    /// </para>
+    /// <para>
+    /// The row's own order is kept: entries are only dropped, never reordered.
+    /// </para>
+    /// </summary>
+    /// <param name="items">The row, in the order the server produced it.</param>
+    /// <param name="config">The plugin configuration.</param>
+    /// <returns>The row with the surplus entries of each show removed.</returns>
+    public static List<BaseItemDto> Deduplicate(IReadOnlyList<BaseItemDto> items, PluginConfiguration config)
+    {
+        var maxPerSeries = Math.Max(1, config.MaxEpisodesPerSeries);
+
+        // Index by group so the decision is made per show, then applied back in row order.
+        var groups = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        var keys = new string?[items.Count];
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var key = GroupKey(items[i], config);
+            keys[i] = key;
+
+            if (key is null)
+            {
+                continue;
+            }
+
+            if (!groups.TryGetValue(key, out var members))
+            {
+                members = new List<int>();
+                groups[key] = members;
+            }
+
+            members.Add(i);
+        }
+
+        var keep = new HashSet<int>();
+        foreach (var (key, members) in groups)
+        {
+            var allowed = key.StartsWith(MovieKeyPrefix, StringComparison.Ordinal) ? 1 : maxPerSeries;
+
+            if (members.Count <= allowed)
+            {
+                keep.UnionWith(members);
+                continue;
+            }
+
+            foreach (var index in members
+                .OrderByDescending(i => items[i].UserData?.LastPlayedDate ?? DateTime.MinValue)
+                .Take(allowed))
+            {
+                keep.Add(index);
+            }
+        }
+
+        var result = new List<BaseItemDto>(items.Count);
+        for (var i = 0; i < items.Count; i++)
+        {
+            // An entry that belongs to no group (a one-off, or a type not being
+            // deduplicated) is never a duplicate of anything.
+            if (keys[i] is null || keep.Contains(i))
+            {
+                result.Add(items[i]);
+            }
+        }
+
+        return result;
+    }
+
+    private const string MovieKeyPrefix = "movie:";
+
+    /// <summary>
+    /// What makes two entries the same thing. Episodes are the same show when they share
+    /// a series; movies are the same film when they share a name, which is the only case
+    /// a movie can legitimately repeat in the row.
+    /// </summary>
+    private static string? GroupKey(BaseItemDto item, PluginConfiguration config)
+    {
+        if (item.Type == BaseItemKind.Episode)
+        {
+            if (!config.DeduplicateSeries)
+            {
+                return null;
+            }
+
+            if (item.SeriesId is Guid seriesId && seriesId != Guid.Empty)
+            {
+                return "series:" + seriesId.ToString("N");
+            }
+
+            return string.IsNullOrEmpty(item.SeriesName) ? null : "series:" + item.SeriesName;
+        }
+
+        if (item.Type == BaseItemKind.Movie && config.DeduplicateMovies)
+        {
+            return string.IsNullOrEmpty(item.Name) ? null : MovieKeyPrefix + item.Name;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// True if the user has any relationship with this episode at all: a resume
     /// position, a play count, a played flag, or a recorded play date.
     /// </summary>
-    private static bool HasPlayState(JsonNode item)
+    private static bool HasPlayState(BaseItemDto item)
     {
-        var userData = item["UserData"];
-        if (userData is null)
-        {
-            return false;
-        }
+        var userData = item.UserData;
 
-        if (userData["PlaybackPositionTicks"]?.GetValue<long>() > 0)
-        {
-            return true;
-        }
-
-        if (userData["PlayCount"]?.GetValue<int>() > 0)
-        {
-            return true;
-        }
-
-        if (userData["Played"]?.GetValue<bool>() == true)
-        {
-            return true;
-        }
-
-        return !string.IsNullOrEmpty(userData["LastPlayedDate"]?.GetValue<string>());
+        return userData is not null
+            && (userData.PlaybackPositionTicks > 0
+                || userData.PlayCount > 0
+                || userData.Played
+                || userData.LastPlayedDate is not null);
     }
+
+    private static bool Is(string value, string expected)
+        => value.Equals(expected, StringComparison.OrdinalIgnoreCase);
+
+    private static bool Mentions(string value, string expected)
+        => value.Contains(expected, StringComparison.OrdinalIgnoreCase);
 }

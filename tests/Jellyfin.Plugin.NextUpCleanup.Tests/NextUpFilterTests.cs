@@ -1,161 +1,234 @@
-using System.Text.Json.Nodes;
+using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.NextUpCleanup.Configuration;
 using Jellyfin.Plugin.NextUpCleanup.Filtering;
-using Jellyfin.Plugin.NextUpCleanup.Middleware;
+using MediaBrowser.Model.Dto;
 using Xunit;
 
 namespace Jellyfin.Plugin.NextUpCleanup.Tests;
 
 public class NextUpFilterTests
 {
-    private static string Body(params string[] items)
-        => $"{{\"Items\":[{string.Join(',', items)}],\"TotalRecordCount\":{items.Length},\"StartIndex\":0}}";
+    private static BaseItemDto Episode(int season, int number, UserItemDataDto? userData = null)
+        => new()
+        {
+            Type = BaseItemKind.Episode,
+            ParentIndexNumber = season,
+            IndexNumber = number,
+            UserData = userData
+        };
 
-    private static string Episode(int season, int number, string name = "Ep", string? userData = null)
-        => $"{{\"Name\":\"{name}\",\"Type\":\"Episode\",\"ParentIndexNumber\":{season},\"IndexNumber\":{number}"
-            + (userData is null ? string.Empty : $",\"UserData\":{userData}")
-            + "}";
-
-    private static string[] Names(string json)
-        => JsonNode.Parse(json)!["Items"]!.AsArray().Select(i => i!["Name"]!.GetValue<string>()).ToArray();
-
-    private static int Total(string json)
-        => JsonNode.Parse(json)!["TotalRecordCount"]!.GetValue<int>();
-
-    [Fact]
-    public void HidesFirstEpisodes()
-    {
-        var json = Body(
-            Episode(1, 1, "Bogus"),
-            Episode(3, 4, "Real"),
-            Episode(1, 1, "AlsoBogus"));
-
-        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
-
-        Assert.Equal(2, hidden);
-        Assert.Equal(new[] { "Real" }, Names(result));
-    }
-
-    [Fact]
-    public void KeepsLaterEpisodesOfSeasonOne()
-    {
-        var json = Body(Episode(1, 2, "S01E02"), Episode(1, 12, "S01E12"));
-
-        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
-
-        Assert.Equal(0, hidden);
-        Assert.Equal(json, result);
-    }
-
-    [Fact]
-    public void KeepsFirstEpisodeOfALaterSeason()
-    {
-        // S02E01 is a legitimate next up: it means season one is finished.
-        var json = Body(Episode(2, 1, "S02E01"));
-
-        NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
-
-        Assert.Equal(0, hidden);
-    }
+    [Theory]
+    [InlineData(1, 1, true)]  // the entry Jellyfin 10.11 surfaces for a series you never started
+    [InlineData(1, 2, false)] // you are actually watching this one
+    [InlineData(1, 12, false)]
+    [InlineData(2, 1, false)] // S02E01 means you finished season one
+    public void HidesOnlyTheFirstEpisodeOfTheFirstSeason(int season, int number, bool hidden)
+        => Assert.Equal(hidden, NextUpFilter.ShouldHide(Episode(season, number), FilterMode.AllFirstEpisodes));
 
     [Fact]
     public void LeavesNonEpisodesAlone()
     {
-        var json = "{\"Items\":[{\"Name\":\"A Film\",\"Type\":\"Movie\",\"ParentIndexNumber\":1,\"IndexNumber\":1}],\"TotalRecordCount\":1}";
+        var movie = new BaseItemDto { Type = BaseItemKind.Movie, ParentIndexNumber = 1, IndexNumber = 1 };
 
-        NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out var hidden);
-
-        Assert.Equal(0, hidden);
+        Assert.False(NextUpFilter.ShouldHide(movie, FilterMode.AllFirstEpisodes));
     }
+
+    [Fact]
+    public void AnEpisodeWithNoNumbersIsLeftAlone()
+    {
+        var unnumbered = new BaseItemDto { Type = BaseItemKind.Episode };
+
+        Assert.False(NextUpFilter.ShouldHide(unnumbered, FilterMode.AllFirstEpisodes));
+    }
+
+    [Fact]
+    public void AllMode_HidesAFirstEpisodeEvenWhenItHasPlayState()
+        => Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched(ticks: 123456)), FilterMode.AllFirstEpisodes));
+
+    public static TheoryData<UserItemDataDto> PlayState => new()
+    {
+        Watched(ticks: 123456),
+        Watched(playCount: 1),
+        Watched(played: true),
+        Watched(lastPlayed: new DateTime(2026, 7, 1, 20, 0, 0, DateTimeKind.Utc))
+    };
+
+    private static UserItemDataDto Watched(
+        long ticks = 0,
+        int playCount = 0,
+        bool played = false,
+        DateTime? lastPlayed = null)
+        => new()
+        {
+            Key = "key",
+            PlaybackPositionTicks = ticks,
+            PlayCount = playCount,
+            Played = played,
+            LastPlayedDate = lastPlayed
+        };
 
     [Theory]
-    [InlineData("{\"PlaybackPositionTicks\":123456}")]
-    [InlineData("{\"PlayCount\":1}")]
-    [InlineData("{\"Played\":true}")]
-    [InlineData("{\"LastPlayedDate\":\"2026-07-01T20:00:00.0000000Z\"}")]
-    public void UntouchedMode_KeepsAFirstEpisodeWithPlayState(string userData)
-    {
-        var json = Body(Episode(1, 1, "Started", userData));
-
-        NextUpFilter.Apply(json, FilterMode.UntouchedFirstEpisodes, null, out var hidden);
-
-        Assert.Equal(0, hidden);
-    }
+    [MemberData(nameof(PlayState))]
+    public void UntouchedMode_KeepsAFirstEpisodeWithPlayState(UserItemDataDto userData)
+        => Assert.False(NextUpFilter.ShouldHide(Episode(1, 1, userData), FilterMode.UntouchedFirstEpisodes));
 
     [Fact]
     public void UntouchedMode_HidesAFirstEpisodeWithoutPlayState()
     {
-        var json = Body(
-            Episode(1, 1, "Never", "{\"PlaybackPositionTicks\":0,\"PlayCount\":0,\"Played\":false}"),
-            Episode(1, 1, "NoUserData"));
-
-        NextUpFilter.Apply(json, FilterMode.UntouchedFirstEpisodes, null, out var hidden);
-
-        Assert.Equal(2, hidden);
-    }
-
-    [Fact]
-    public void TrimsBackToTheRequestedLimit()
-    {
-        // What an over-fetched request looks like: the client asked for 2, we asked for 6.
-        var json = Body(
-            Episode(1, 1, "Bogus"),
-            Episode(2, 3, "A"),
-            Episode(4, 5, "B"),
-            Episode(6, 7, "C"),
-            Episode(8, 9, "D"),
-            Episode(1, 1, "Bogus2"));
-
-        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, 2, out var hidden);
-
-        Assert.Equal(new[] { "A", "B" }, Names(result));
-        Assert.Equal(1, hidden); // only the one seen before the page filled up
-    }
-
-    [Fact]
-    public void TotalRecordCountNeverUndercountsWhatIsReturned()
-    {
-        var json = Body(Episode(1, 1, "Bogus"), Episode(2, 1, "Keep"));
-
-        var result = NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out _);
-
-        Assert.Equal(1, Total(result));
-        Assert.Single(Names(result));
-    }
-
-    [Fact]
-    public void UnchangedBodyIsReturnedByReferenceWhenNothingIsHidden()
-    {
-        var json = Body(Episode(5, 5, "Keep"));
-
-        Assert.Same(json, NextUpFilter.Apply(json, FilterMode.AllFirstEpisodes, null, out _));
-    }
-
-    [Fact]
-    public void EmptyResultIsLeftAlone()
-    {
-        const string Json = "{\"Items\":[],\"TotalRecordCount\":0}";
-
-        Assert.Same(Json, NextUpFilter.Apply(Json, FilterMode.AllFirstEpisodes, null, out var hidden));
-        Assert.Equal(0, hidden);
+        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched()), FilterMode.UntouchedFirstEpisodes));
+        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1), FilterMode.UntouchedFirstEpisodes));
     }
 
     [Theory]
-    [InlineData("/Shows/NextUp", EndpointKind.NextUp)]
-    [InlineData("/shows/nextup", EndpointKind.NextUp)]
-    [InlineData("/jellyfin/Shows/NextUp", EndpointKind.NextUp)] // base path left on by a proxy
-    [InlineData("/HomeScreen/Section/NextUp", EndpointKind.NextUp)]
-    [InlineData("/HomeScreen/Section/NextUpEnhanced", EndpointKind.NextUp)]
-    [InlineData("/HomeScreen/Section/ContinueWatching", EndpointKind.Mixed)]
-    [InlineData("/HomeScreen/Section/ResumeItems", EndpointKind.Mixed)]
-    [InlineData("/HomeScreen/Section/LatestMedia", EndpointKind.None)]
-    [InlineData("/HomeScreen/Section/MyMedia", EndpointKind.None)]
-    [InlineData("/UserItems/Resume", EndpointKind.Mixed)]
-    [InlineData("/Users/abc/Items/Resume", EndpointKind.Mixed)]
-    [InlineData("/Shows/Upcoming", EndpointKind.None)]
-    [InlineData("/Users/abc/Items/Latest", EndpointKind.None)]
-    [InlineData("/Shows/NextUp/Extra", EndpointKind.None)]
-    [InlineData("", EndpointKind.None)]
-    internal void RecognisesTheRowEndpoints(string path, EndpointKind expected)
-        => Assert.Equal(expected, NextUpFilterMiddleware.ClassifyEndpoint(path));
+    // Stock Jellyfin. One action behind /Shows/NextUp, whatever prefix the client uses.
+    [InlineData("TvShows", "GetNextUp", null, EndpointKind.NextUp)]
+    // Continue Watching: /UserItems/Resume and the legacy /Users/{id}/Items/Resume.
+    [InlineData("Items", "GetResumeItems", null, EndpointKind.Mixed)]
+    [InlineData("Items", "GetResumeItemsLegacy", null, EndpointKind.Mixed)]
+    // The Home Screen Sections plugin: every row comes from one action, so the section id
+    // is what says which row it is.
+    [InlineData("HomeScreen", "GetSectionContent", "NextUp", EndpointKind.NextUp)]
+    [InlineData("HomeScreen", "GetSectionContent", "ContinueWatching", EndpointKind.Mixed)]
+    [InlineData("HomeScreen", "GetSectionContent", "ResumeItems", EndpointKind.Mixed)]
+    [InlineData("HomeScreen", "GetSectionContent", "MyMedia", EndpointKind.None)]
+    [InlineData("HomeScreen", "GetSectionContent", "LatestMovies", EndpointKind.None)]
+    [InlineData("HomeScreen", "GetSectionContent", "LiveTV", EndpointKind.None)]
+    [InlineData("HomeScreen", "GetSectionContent", null, EndpointKind.None)]
+    // Rows a newly added S01E01 legitimately belongs in.
+    [InlineData("TvShows", "GetUpcomingEpisodes", null, EndpointKind.None)]
+    [InlineData("UserLibrary", "GetLatestMedia", null, EndpointKind.None)]
+    [InlineData("Items", "GetItems", null, EndpointKind.None)]
+    [InlineData("HomeScreen", "GetHomeScreenSections", null, EndpointKind.None)]
+    [InlineData(null, null, null, EndpointKind.None)]
+    internal void RecognisesTheRowActions(string? controller, string? action, string? section, EndpointKind expected)
+        => Assert.Equal(expected, NextUpFilter.Classify(controller, action, section));
+
+    private static readonly Guid Friends = Guid.NewGuid();
+    private static readonly Guid Himym = Guid.NewGuid();
+
+    private static BaseItemDto Watching(Guid series, string name, int daysAgo)
+        => new()
+        {
+            Name = name,
+            Type = BaseItemKind.Episode,
+            SeriesId = series,
+            SeriesName = series == Friends ? "Friends" : "HIMYM",
+            UserData = Watched(ticks: 1, lastPlayed: new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc).AddDays(-daysAgo))
+        };
+
+    private static string[] Names(IEnumerable<BaseItemDto> items) => items.Select(i => i.Name!).ToArray();
+
+    [Fact]
+    public void CollapsesASeriesToItsMostRecentlyPlayedEpisode()
+    {
+        var row = new[]
+        {
+            Watching(Friends, "S09E14", 30),
+            Watching(Himym, "S02E04", 12),
+            Watching(Friends, "S10E08", 2),
+            Watching(Himym, "S04E10", 1),
+            Watching(Friends, "S09E23", 20)
+        };
+
+        var result = NextUpFilter.Deduplicate(row, new PluginConfiguration());
+
+        // One entry per show, and the row's own order is untouched.
+        Assert.Equal(new[] { "S10E08", "S04E10" }, Names(result));
+    }
+
+    [Fact]
+    public void KeepsTheConfiguredNumberOfEpisodesPerSeries()
+    {
+        var row = new[]
+        {
+            Watching(Friends, "S09E14", 30),
+            Watching(Friends, "S10E08", 2),
+            Watching(Friends, "S09E23", 20)
+        };
+
+        var result = NextUpFilter.Deduplicate(row, new PluginConfiguration { MaxEpisodesPerSeries = 2 });
+
+        Assert.Equal(new[] { "S10E08", "S09E23" }, Names(result));
+    }
+
+    [Fact]
+    public void AnEpisodeWithNoPlayDateLosesToOneThatHasIt()
+    {
+        var never = new BaseItemDto
+        {
+            Name = "NoDate",
+            Type = BaseItemKind.Episode,
+            SeriesId = Friends,
+            UserData = Watched(ticks: 1)
+        };
+
+        var result = NextUpFilter.Deduplicate(new[] { never, Watching(Friends, "S10E08", 400) }, new PluginConfiguration());
+
+        Assert.Equal(new[] { "S10E08" }, Names(result));
+    }
+
+    [Fact]
+    public void DeduplicationCanBeTurnedOff()
+    {
+        var row = new[] { Watching(Friends, "S09E14", 30), Watching(Friends, "S10E08", 2) };
+
+        var result = NextUpFilter.Deduplicate(row, new PluginConfiguration { DeduplicateSeries = false });
+
+        Assert.Equal(new[] { "S09E14", "S10E08" }, Names(result));
+    }
+
+    [Fact]
+    public void EpisodesOfSeriesJellyfinDidNotIdentifyAreGroupedByName()
+    {
+        // No SeriesId on the DTO — the series name is all there is to group on.
+        BaseItemDto Loose(string name, int daysAgo) => new()
+        {
+            Name = name,
+            Type = BaseItemKind.Episode,
+            SeriesName = "Some Show",
+            UserData = Watched(lastPlayed: new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc).AddDays(-daysAgo))
+        };
+
+        var result = NextUpFilter.Deduplicate(new[] { Loose("old", 9), Loose("new", 1) }, new PluginConfiguration());
+
+        Assert.Equal(new[] { "new" }, Names(result));
+    }
+
+    [Fact]
+    public void MoviesAreLeftAloneUnlessAskedFor()
+    {
+        BaseItemDto Copy(int daysAgo) => new()
+        {
+            Name = "Dune",
+            Type = BaseItemKind.Movie,
+            UserData = Watched(lastPlayed: new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc).AddDays(-daysAgo))
+        };
+
+        var row = new[] { Copy(5), Copy(1) };
+
+        Assert.Equal(2, NextUpFilter.Deduplicate(row, new PluginConfiguration()).Count);
+        Assert.Single(NextUpFilter.Deduplicate(row, new PluginConfiguration { DeduplicateMovies = true }));
+    }
+
+    [Fact]
+    public void TwoDifferentMoviesAreNotDuplicates()
+    {
+        var row = new[]
+        {
+            new BaseItemDto { Name = "Dune", Type = BaseItemKind.Movie },
+            new BaseItemDto { Name = "Arrival", Type = BaseItemKind.Movie }
+        };
+
+        Assert.Equal(2, NextUpFilter.Deduplicate(row, new PluginConfiguration { DeduplicateMovies = true }).Count);
+    }
+
+    [Theory]
+    [InlineData(EndpointKind.NextUp, FilterMode.AllFirstEpisodes, FilterMode.AllFirstEpisodes)]
+    [InlineData(EndpointKind.NextUp, FilterMode.UntouchedFirstEpisodes, FilterMode.UntouchedFirstEpisodes)]
+    // A row that is genuinely in progress must not lose an episode you are part-way
+    // through, whichever mode is configured.
+    [InlineData(EndpointKind.Mixed, FilterMode.AllFirstEpisodes, FilterMode.UntouchedFirstEpisodes)]
+    [InlineData(EndpointKind.Mixed, FilterMode.UntouchedFirstEpisodes, FilterMode.UntouchedFirstEpisodes)]
+    internal void NarrowsTheModeOnACombinedRow(EndpointKind kind, FilterMode configured, FilterMode expected)
+        => Assert.Equal(expected, NextUpFilter.EffectiveMode(configured, kind));
 }

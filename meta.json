@@ -1,15 +1,15 @@
 {
   "category": "General",
-  "changelog": "Filters the combined Continue Watching / Next Up home row, which 1.0.0.0 missed: the Continue Watching endpoints and any Home Screen Sections section are now covered, not just /Shows/NextUp. On a combined row only untouched first episodes are hidden, so an episode you are part-way through never disappears. Routes behind a reverse proxy base path are matched too, and every filtered row is logged at debug level.",
-  "description": "Clears the first episodes of never-started series out of Next Up, so the row only holds shows you are actually watching. Filters the server's response, changes no watch data.",
+  "changelog": "Rows are now filtered as the controller's own result, before anything is serialised, instead of by rewriting the response body. That is what makes it work everywhere: it no longer depends on the client's JSON casing profile or on response compression, and it reaches rows built by plugin controllers such as the Home Screen Sections plugin, which the 1.0 middleware could miss entirely. New: Continue Watching is deduplicated, so a series you skipped around in collapses to the episode you played most recently. An unrecognised row endpoint now names itself in the debug log.",
+  "description": "Clears the first episodes of never-started series out of Next Up and collapses duplicate episodes of one series in Continue Watching, so both rows only hold shows you are actually watching. Filters the server's response, changes no watch data.",
   "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
   "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
   "name": "Next Up Cleanup",
-  "overview": "Next Up without the first episode of every show you never started.",
+  "overview": "Next Up without the first episode of every show you never started, and Continue Watching without the same show four times.",
   "owner": "Christian",
   "targetAbi": "10.11.0.0",
-  "timestamp": "2026-08-03T15:00:00.000Z",
-  "version": "1.0.0.1",
+  "timestamp": "2026-08-11T12:00:00.000Z",
+  "version": "1.1.0.0",
   "status": "Active",
   "autoUpdate": false
 }

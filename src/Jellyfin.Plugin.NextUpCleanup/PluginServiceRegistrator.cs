@@ -1,11 +1,8 @@
-using Jellyfin.Plugin.NextUpCleanup.Middleware;
+using Jellyfin.Plugin.NextUpCleanup.Filtering;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.NextUpCleanup;
 
@@ -17,32 +14,14 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     /// <inheritdoc />
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
-        serviceCollection.TryAddEnumerable(
-            ServiceDescriptor.Transient<IStartupFilter, NextUpStartupFilter>());
-    }
-}
+        serviceCollection.AddSingleton<NextUpActionFilter>();
 
-/// <summary>
-/// Puts the filter at the very front of the request pipeline, so it wraps the response
-/// the server's own controllers produce — including whatever compression the server
-/// applies on the way out.
-/// </summary>
-internal sealed class NextUpStartupFilter : IStartupFilter
-{
-    /// <inheritdoc />
-    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
-    {
-        return app =>
+        // A global MVC filter, so it sees every controller the server dispatches to —
+        // Jellyfin's own and those that plugins add, which is how rows built by the Home
+        // Screen Sections plugin get filtered without it knowing about this plugin.
+        serviceCollection.Configure<MvcOptions>(options =>
         {
-            var logger = app.ApplicationServices.GetRequiredService<ILogger<NextUpFilterMiddleware>>();
-
-            app.Use(async (context, nextMiddleware) =>
-            {
-                var middleware = new NextUpFilterMiddleware(_ => nextMiddleware(), logger);
-                await middleware.InvokeAsync(context).ConfigureAwait(false);
-            });
-
-            next(app);
-        };
+            options.Filters.AddService<NextUpActionFilter>();
+        });
     }
 }

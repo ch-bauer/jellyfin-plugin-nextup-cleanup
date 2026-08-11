@@ -1,10 +1,11 @@
 # Next Up Cleanup for Jellyfin (Proof of Concept)
 
-Clears the first episodes of series you never started out of the **Next Up** row, so it
-holds shows you are actually watching again — on **every client**, because the server's
-response is filtered before it leaves the server. **No watch data is touched**: nothing
-is marked, reset or deleted, and switching the plugin off puts the row straight back to
-how Jellyfin serves it.
+Clears the first episodes of series you never started out of the **Next Up** row, and
+collapses a show that fills **Continue Watching** with half-finished episodes down to
+the one you are actually on — so both rows hold what you are watching again, on **every
+client**, because the server's response is filtered before it leaves the server. **No
+watch data is touched**: nothing is marked, reset or deleted, and switching the plugin
+off puts the rows straight back to how Jellyfin serves them.
 
 ## Why the row fills up in the first place
 
@@ -22,30 +23,46 @@ plugin does.
 
 ## How it works
 
-- Middleware in front of every endpoint that can serve a Next Up row:
-  - `/Shows/NextUp` — every stock client.
-  - `/HomeScreen/Section/{id}` — the Home Screen Sections plugin and Jellyfin Enhanced
-    build their rows in process, so `/Shows/NextUp` never sees the request. Sections whose
-    id mentions Next Up, Resume or Continue are filtered; Latest Media, My Media and Live
-    TV are left alone, since a newly added `S01E01` belongs in those.
-  - `/UserItems/Resume` and `/Users/{id}/Items/Resume` — the Continue Watching row, which
-    the 10.11 web client merges Next Up into.
+An **MVC action filter** edits the `QueryResult<BaseItemDto>` the controller returned,
+before any of it is serialised. That is what makes it client-proof: it does not matter
+which JSON casing profile the client negotiated, whether the response is gzip, brotli or
+deflate, or what other plugins do to the body afterwards — none of that has happened yet.
+It also reaches rows built by *plugin* controllers, which response middleware sitting on
+the URL cannot reliably do.
 
-  A base path left in front of the route by a reverse proxy (`/jellyfin/Shows/NextUp`)
-  still matches.
+Rows are recognised by the controller and action Jellyfin dispatched to, not by the URL
+text, so a reverse-proxy base path (`/jellyfin/Shows/NextUp`), the `/emby` prefix older
+clients use, and the legacy spelling of a route all match on their own:
+
+| Row | Controller / action |
+| --- | --- |
+| Next Up, every stock client | `TvShows` / `GetNextUp` |
+| Continue Watching (`/UserItems/Resume`, `/Users/{id}/Items/Resume`) | `Items` / `GetResumeItems`, `GetResumeItemsLegacy` |
+| Home Screen Sections rows | `HomeScreen` / `GetSectionContent` |
+
+The Home Screen Sections plugin builds its rows in process and serves every one of them
+from that single action, so `/Shows/NextUp` never sees the request; which row it is comes
+from the section id. Sections that mention Next Up, Resume or Continue are filtered, and
+Latest Media, My Media and Live TV are left alone, since a newly added `S01E01` belongs
+in those.
+
+What the filter then does to a row:
+
+- Episodes with season 1, episode 1 are dropped. `S02E01` stays: that one means you
+  finished season one.
 - On a combined **Continue Watching / Next Up** row, *Every first episode* is narrowed to
   *Only untouched first episodes* — an episode you are genuinely part-way through is never
   taken out of Continue Watching, whichever mode is configured.
-- Episodes with season 1, episode 1 are dropped from the response. `S02E01` stays: that
-  one means you finished season one.
-- The server applies the client's row length *before* the plugin removes anything, so a
-  20-item row would come back short. The request is over-fetched and trimmed back to the
-  length the client asked for, and `TotalRecordCount` is corrected so paging clients
-  behave. Requests for a later page are filtered but not over-fetched, since the offset
-  would no longer line up.
-- Anything that is not a `200` with a parseable body is passed through untouched, as is
-  any response the plugin fails on — a broken filter degrades to stock Jellyfin, never to
-  a broken row.
+- A series with several part-way-through episodes in the row is collapsed to the one you
+  played most recently, decided by `LastPlayedDate` rather than by how far into an episode
+  you are. The row's own order is kept; entries are only dropped, never reordered.
+- The controller applies the client's row length *before* anything is removed, so a
+  20-item row would come back short. The `limit` argument is inflated and the result
+  trimmed back to the length the client asked for, and `TotalRecordCount` is corrected so
+  paging clients behave. Requests for a later page are filtered but not over-fetched,
+  since the offset would no longer line up.
+- Any response the plugin fails on is left exactly as the controller produced it — a
+  broken filter degrades to stock Jellyfin, never to a broken row.
 
 ## Configuration
 
@@ -60,6 +77,11 @@ Dashboard → Plugins → Next Up Cleanup.
 - **Over-fetch multiplier** — how much longer a row to ask the server for so it is still
   full after filtering (default 3; 1 disables it).
 - **Over-fetch ceiling** — upper bound on that inflated length (default 150).
+- **One entry per series** (default on) — collapses a series to the episode you played
+  most recently.
+- **Episodes per series** — how many episodes of one series may stay (default 1).
+- **One entry per movie** (default off) — only matters when the same film is in the
+  library more than once.
 
 ## Installation
 
@@ -73,13 +95,15 @@ Requires Jellyfin **10.11**.
 
 Turn on debug logging (Dashboard → Logs, or `"Jellyfin.Plugin.NextUpCleanup": "Debug"` in
 `logging.json`) and reload the home screen. Every row the plugin touched logs one line
-with the path it matched and how many entries it hid.
+with the controller and action it matched and what it removed.
 
 - **A line with `hid 0`** — the plugin saw the row and there was nothing matching `S01E01`
   in it, or the mode is *Only untouched first episodes* and the entries have play state.
-- **No line at all** — the row is served by an endpoint the plugin does not know about.
-  Open the browser dev tools, reload the home screen, and check the Network tab for the
-  request behind that row; the path in it is what needs adding.
+- **A `returned N first-episode entr(ies) and is not an endpoint this plugin filters`
+  line** — that controller and action is the row, and it needs adding to `Classify` in
+  `NextUpFilter.cs`. The plugin looks for this on every action it does not handle, so an
+  unknown row endpoint names itself.
+- **No line at all** — the plugin is not loaded, or filtering is switched off.
 
 ## Building
 

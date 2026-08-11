@@ -68,6 +68,43 @@
                     </div>
                 </div>
 
+                <h3>Duplicate shows</h3>
+                <p style="opacity:0.8;">
+                    Jellyfin puts <em>every</em> episode you have progress on into Continue
+                    Watching, so skipping around in one series fills the row with it.
+                </p>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input is="emby-checkbox" type="checkbox" id="DeduplicateSeries" />
+                        <span>One entry per series</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Collapses a series down to the episode you played most recently.
+                    </div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="MaxEpisodesPerSeries">
+                        Episodes per series
+                    </label>
+                    <input is="emby-input" type="number" id="MaxEpisodesPerSeries" min="1" max="20" />
+                    <div class="fieldDescription">
+                        How many episodes of one series may stay in the row. 1 is the strict
+                        &ldquo;where I am in this show&rdquo; case.
+                    </div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input is="emby-checkbox" type="checkbox" id="DeduplicateMovies" />
+                        <span>One entry per movie</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Only matters when the same film is in the library more than once.
+                    </div>
+                </div>
+
                 <div>
                     <button is="emby-button" type="submit" class="raised button-submit block">
                         <span>Save</span>
@@ -88,6 +125,9 @@
                     page.querySelector('#Mode').value = String(config.Mode || 0);
                     page.querySelector('#OverfetchMultiplier').value = config.OverfetchMultiplier || 3;
                     page.querySelector('#MaxOverfetchLimit').value = config.MaxOverfetchLimit || 150;
+                    page.querySelector('#DeduplicateSeries').checked = config.DeduplicateSeries !== false;
+                    page.querySelector('#MaxEpisodesPerSeries').value = config.MaxEpisodesPerSeries || 1;
+                    page.querySelector('#DeduplicateMovies').checked = config.DeduplicateMovies === true;
                     Dashboard.hideLoadingMsg();
                 });
             }
@@ -102,6 +142,9 @@
                     config.Mode = parseInt(page.querySelector('#Mode').value, 10) || 0;
                     config.OverfetchMultiplier = parseInt(page.querySelector('#OverfetchMultiplier').value, 10) || 1;
                     config.MaxOverfetchLimit = parseInt(page.querySelector('#MaxOverfetchLimit').value, 10) || 150;
+                    config.DeduplicateSeries = page.querySelector('#DeduplicateSeries').checked;
+                    config.MaxEpisodesPerSeries = parseInt(page.querySelector('#MaxEpisodesPerSeries').value, 10) || 1;
+                    config.DeduplicateMovies = page.querySelector('#DeduplicateMovies').checked;
 
                     ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
                         Dashboard.processPluginConfigurationUpdateResult(result);
