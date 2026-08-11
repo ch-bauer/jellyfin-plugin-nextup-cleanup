@@ -34,10 +34,12 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
     private static readonly ConcurrentDictionary<string, DateTime> _warnedAt = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ILogger<NextUpActionFilter> _logger;
+    private readonly SeriesExclusionStore _exclusions;
 
-    public NextUpActionFilter(ILogger<NextUpActionFilter> logger)
+    public NextUpActionFilter(ILogger<NextUpActionFilter> logger, SeriesExclusionStore exclusions)
     {
         _logger = logger;
+        _exclusions = exclusions;
     }
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -63,7 +65,7 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
 
         try
         {
-            Rewrite(executed, config, requestedLimit, kind, context);
+            Rewrite(executed, config, requestedLimit, kind, context, CurrentUserId(context));
         }
         catch (Exception ex)
         {
@@ -77,7 +79,8 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
         PluginConfiguration config,
         int? requestedLimit,
         EndpointKind kind,
-        ActionExecutingContext context)
+        ActionExecutingContext context,
+        Guid userId)
     {
         if (executed.Result is not ObjectResult result || result.Value is not QueryResult<BaseItemDto> query)
         {
@@ -98,15 +101,25 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
         }
 
         var kept = new List<BaseItemDto>(items.Count);
+        var excluded = 0;
+
         foreach (var item in items)
         {
+            // A series switched off from its detail page leaves outright: no episode
+            // number, play state or threshold gets a say.
+            if (item.SeriesId is Guid seriesId && _exclusions.IsExcluded(userId, seriesId))
+            {
+                excluded++;
+                continue;
+            }
+
             if (!NextUpFilter.ShouldHide(item, config, kind))
             {
                 kept.Add(item);
             }
         }
 
-        var hidden = items.Count - kept.Count;
+        var hidden = items.Count - kept.Count - excluded;
 
         // Deduplicating after hiding, so a show whose only surviving entry is its S01E01
         // is not represented by an entry that is about to be removed anyway.
@@ -126,18 +139,19 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
         // row still full of S01E01", and silence means the row is being served by an
         // action Classify does not know about.
         _logger.LogDebug(
-            "Next Up: {Controller}/{Action} ({Kind}, mode {Mode}) — {Total} entr(ies) in, hid {Hidden} first episode(s), collapsed {Duplicates} duplicate(s), trimmed {Trimmed} over-fetched, {Kept} out",
+            "Next Up: {Controller}/{Action} ({Kind}, mode {Mode}) — {Total} entr(ies) in, dropped {Excluded} from switched-off series, hid {Hidden} first episode(s), collapsed {Duplicates} duplicate(s), trimmed {Trimmed} over-fetched, {Kept} out",
             context.RouteData.Values["controller"],
             context.RouteData.Values["action"],
             kind,
             config.Mode,
             items.Count,
+            excluded,
             hidden,
             duplicates,
             trimmed,
             deduplicated.Count);
 
-        if (hidden == 0 && duplicates == 0 && trimmed == 0)
+        if (hidden == 0 && duplicates == 0 && trimmed == 0 && excluded == 0)
         {
             return;
         }
@@ -147,7 +161,7 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
         // fewer rows than we are returning.
         result.Value = new QueryResult<BaseItemDto>(
             query.StartIndex,
-            Math.Max(deduplicated.Count, query.TotalRecordCount - hidden - duplicates),
+            Math.Max(deduplicated.Count, query.TotalRecordCount - hidden - duplicates - excluded),
             deduplicated);
     }
 
@@ -224,6 +238,18 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
             "Next Up: {Route} returned {Type}, not a QueryResult<BaseItemDto>; that row is not being filtered. Re-warns hourly",
             key,
             executed.Result?.GetType().Name ?? "nothing");
+    }
+
+    /// <summary>
+    /// The user this request was authenticated as. Exclusions are per user, so a row is
+    /// filtered against whoever asked for it.
+    /// </summary>
+    private static Guid CurrentUserId(ActionExecutingContext context)
+    {
+        var value = context.HttpContext.User.Claims
+            .FirstOrDefault(c => c.Type.Equals("Jellyfin-UserId", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        return Guid.TryParse(value, out var userId) ? userId : Guid.Empty;
     }
 
     private static string? SectionType(ActionExecutingContext context)

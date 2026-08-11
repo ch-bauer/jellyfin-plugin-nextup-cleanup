@@ -125,6 +125,23 @@
                     </div>
                 </div>
 
+                <h3>Per-series toggle</h3>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input is="emby-checkbox" type="checkbox" id="ShowSeriesToggle" />
+                        <span>Show the toggle on series pages</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Adds an eye button next to Play on a series page. Switching a series off
+                        removes every one of its episodes from Next Up and Continue Watching, with
+                        no exceptions &mdash; episode number, play state and the marks above stop
+                        applying to it. Each user has their own list, so switching a series off
+                        does not affect anybody else. Turning this off only hides the button;
+                        series already switched off stay switched off.
+                    </div>
+                </div>
+
                 <h3>Abandoned episodes</h3>
                 <p style="opacity:0.8;">
                     Filtering already keeps barely-started episodes out of every row. This is
@@ -184,6 +201,7 @@
                     page.querySelector('#DeduplicateSeries').checked = config.DeduplicateSeries !== false;
                     page.querySelector('#MaxEpisodesPerSeries').value = config.MaxEpisodesPerSeries || 1;
                     page.querySelector('#DeduplicateMovies').checked = config.DeduplicateMovies === true;
+                    page.querySelector('#ShowSeriesToggle').checked = config.ShowSeriesToggle !== false;
                     Dashboard.hideLoadingMsg();
                 });
             }
@@ -204,6 +222,7 @@
                     config.DeduplicateSeries = page.querySelector('#DeduplicateSeries').checked;
                     config.MaxEpisodesPerSeries = parseInt(page.querySelector('#MaxEpisodesPerSeries').value, 10) || 1;
                     config.DeduplicateMovies = page.querySelector('#DeduplicateMovies').checked;
+                    config.ShowSeriesToggle = page.querySelector('#ShowSeriesToggle').checked;
 
                     ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
                         Dashboard.processPluginConfigurationUpdateResult(result);

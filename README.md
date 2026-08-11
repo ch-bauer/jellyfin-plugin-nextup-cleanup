@@ -56,6 +56,8 @@ alone, since a newly added `S01E01` belongs in those.
 
 What the filter then does to a row:
 
+- Anything belonging to a series the requesting user has [switched
+  off](#switching-a-series-off) is dropped first, before any other rule is consulted.
 - Episodes with season 1, episode 1 are dropped. `S02E01` stays: that one means you
   finished season one.
 - On a row that also carries **Continue Watching**, an episode you are genuinely part-way
@@ -102,8 +104,29 @@ so the thing you are genuinely part-way through never disappears.
 - **Episodes per series** — how many episodes of one series may stay (default 1).
 - **One entry per movie** (default off) — only matters when the same film is in the
   library more than once.
+- **Show the toggle on series pages** (default on) — see below.
 - **Reset episodes under (minutes)** — the mark used by the scheduled task below
   (default 2).
+
+## Switching a series off
+
+A series page in the web client gets an eye button next to **Play**. Switch a series off
+and every one of its episodes disappears from Next Up and Continue Watching — outright,
+with no exceptions. Episode number, play state, resume position and both marks above stop
+applying to that series; it is simply not in those rows until you switch it back on.
+
+**The list is per user.** It is stored against whoever is signed in, and the server reads
+the user from the request's own token, so switching a series off never changes what anyone
+else sees.
+
+The button is added by a small script the plugin injects into the web client's
+`index.html` at request time — nothing is written into the web folder, so a jellyfin-web
+update cannot wipe it. Turning **Show the toggle on series pages** off stops the injection;
+series already switched off stay switched off, since the filtering is server-side and does
+not depend on the button.
+
+Because the filtering is server-side, a series switched off from a browser is also gone
+from those rows on every other client — phone, TV, anything.
 
 ## Resetting abandoned episodes
 

@@ -315,6 +315,26 @@ public class NextUpFilterTests
             Config(FilterMode.AllFirstEpisodes)));
     }
 
+    [Fact]
+    public void ExclusionsAreKeptPerUser()
+    {
+        var store = new SeriesExclusionStore();
+        var alice = Guid.NewGuid();
+        var bob = Guid.NewGuid();
+
+        // No plugin instance in a unit test, so there is nowhere to persist to; the store
+        // has to say "no" rather than throw.
+        Assert.False(store.IsExcluded(alice, Friends));
+        Assert.False(store.Add(alice, Friends, "Friends"));
+        Assert.False(store.IsExcluded(bob, Friends));
+    }
+
+    [Theory]
+    [InlineData("00000000-0000-0000-0000-000000000000", "11111111-1111-1111-1111-111111111111")]
+    [InlineData("11111111-1111-1111-1111-111111111111", "00000000-0000-0000-0000-000000000000")]
+    public void AnEmptyUserOrSeriesIsNeverExcluded(string user, string series)
+        => Assert.False(new SeriesExclusionStore().IsExcluded(Guid.Parse(user), Guid.Parse(series)));
+
     [Theory]
     // The merged section the Home Screen Sections "combine Continue Watching and Next Up"
     // option serves. It carries resumable items, so it is a combined row.

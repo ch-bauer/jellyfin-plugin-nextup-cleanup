@@ -1,5 +1,8 @@
 using Jellyfin.Plugin.NextUpCleanup.Filtering;
 using Jellyfin.Plugin.NextUpCleanup.Tasks;
+using Jellyfin.Plugin.NextUpCleanup.Web;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +18,13 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     /// <inheritdoc />
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
+        serviceCollection.AddSingleton<SeriesExclusionStore>();
         serviceCollection.AddSingleton<NextUpActionFilter>();
+
+        // index.html is a static file, so the series toggle's script has to be injected
+        // by middleware rather than hooked like a controller result.
+        serviceCollection.TryAddEnumerable(
+            ServiceDescriptor.Transient<IStartupFilter, ScriptInjectionStartupFilter>());
 
         // The server discovers IScheduledTask across plugin assemblies itself; registering
         // the type is what lets it be constructed with its dependencies.

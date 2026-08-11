@@ -1,6 +1,30 @@
+using System.Collections.ObjectModel;
 using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.NextUpCleanup.Configuration;
+
+/// <summary>
+/// One series a user has switched off, from the toggle on its detail page.
+/// </summary>
+public class ExcludedSeries
+{
+    /// <summary>
+    /// Gets or sets the user who switched it off. Exclusions are per user: one person
+    /// hiding a show does not hide it for everybody in the house.
+    /// </summary>
+    public Guid UserId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the series.
+    /// </summary>
+    public Guid SeriesId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the series name at the time it was excluded, so the list is
+    /// readable without a library lookup.
+    /// </summary>
+    public string? Name { get; set; }
+}
 
 /// <summary>
 /// Which first episodes get hidden from Next Up.
@@ -81,4 +105,17 @@ public class PluginConfiguration : BasePluginConfiguration
     /// same film is in the library more than once.
     /// </summary>
     public bool DeduplicateMovies { get; set; }
+
+    /// <summary>
+    /// Add the per-series toggle to series detail pages in the web client. Off makes
+    /// the plugin inject nothing; series already excluded stay excluded.
+    /// </summary>
+    public bool ShowSeriesToggle { get; set; } = true;
+
+    /// <summary>
+    /// The series each user has switched off. An excluded series is dropped from Next Up
+    /// and Continue Watching outright — no episode number, play state or threshold enters
+    /// into it.
+    /// </summary>
+    public Collection<ExcludedSeries> ExcludedSeries { get; } = new();
 }
