@@ -1,6 +1,6 @@
 {
   "category": "General",
-  "changelog": "Fixes the Reset abandoned episodes task failing immediately on Jellyfin 10.11.11 with a MissingMethodException. IUserManager.Users was a property up to 10.11.3 and is a GetUsers() method from 10.11.11, so one plugin binary cannot bind to either at compile time and still run on both halves of the 10.11 series. The user list is now asked for in whichever way the running server offers it. Filtering was never affected.",
+  "changelog": "Corrects the plugin's own description and the top of the configuration page, which both still promised that no watch data is ever touched. That stopped being true when the opt-in Reset abandoned episodes task landed in 1.2.0.0, since deleting play state is what that task is for. Filtering still changes nothing, so that is what they now say, naming the task as the one exception. No behaviour changes.",
   "description": "Clears the first episodes of never-started series out of Next Up and collapses duplicate episodes of one series in Continue Watching, so both rows only hold shows you are actually watching. Filtering changes no watch data; an opt-in scheduled task can also clear the play state of barely-started episodes.",
   "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
   "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
@@ -8,8 +8,8 @@
   "overview": "Next Up without the first episode of every show you never started, and Continue Watching without the same show four times.",
   "owner": "Christian",
   "targetAbi": "10.11.0.0",
-  "timestamp": "2026-08-11T17:00:00.000Z",
-  "version": "1.2.0.1",
+  "timestamp": "2026-08-11T18:00:00.000Z",
+  "version": "1.2.0.2",
   "status": "Active",
   "autoUpdate": false
 }
