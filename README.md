@@ -55,10 +55,9 @@ What the filter then does to a row:
 - Episodes with season 1, episode 1 are dropped. `S02E01` stays: that one means you
   finished season one.
 - On a row that also carries **Continue Watching**, an episode you are genuinely part-way
-  through is never removed, whichever mode is configured. "Part-way through" means a
-  resume position, and only that: a play count or a play date with no position on it says
-  the opposite — the episode was finished, or started and abandoned, and Jellyfin is
-  offering it again. Those are exactly the entries you wanted gone.
+  through is never removed, whichever mode is configured. "Part-way through" means a resume
+  position past the *started watching* mark, and only that — a few seconds in is a mis-tap,
+  not something to carry on with.
 - A series with several part-way-through episodes in the row is collapsed to the one you
   played most recently, decided by `LastPlayedDate` rather than by how far into an episode
   you are. The row's own order is kept; entries are only dropped, never reordered.
@@ -78,14 +77,19 @@ Dashboard → Plugins → Next Up Cleanup.
 - **What to hide**
   - *Every first episode* (default) — all `S01E01` entries, without exception. This is the
     one that empties the row.
-  - *Only untouched first episodes* — narrower. A first episode counts as **touched**, and
-    is kept, if *any* of `PlaybackPositionTicks > 0`, `PlayCount > 0`, `Played`, or
-    `LastPlayedDate` is set. So an `S01E01` you started once and abandoned, or finished and
-    are being offered again, stays in the row; only entries with none of those four are
-    removed.
+  - *Only untouched first episodes* — narrower: keeps an `S01E01` you have actually
+    watched, and removes the rest.
+- **Started watching after (minutes)** — default 5. Jellyfin writes a resume position, a
+  play count *and* a play date the instant playback begins, so a mis-tap or a look at the
+  opening titles is enough to pin an episode to the row for good. Below this mark an
+  episode counts as never started. 0 makes any resume position count.
 
-  On a row that also carries Continue Watching, both modes keep any episode with a resume
-  position, so the thing you are part-way through never disappears.
+An episode counts as **watched** only if it is marked played, or its resume position is
+past that mark. A play count and a play date on their own deliberately do not count —
+they are written on the first frame and say nothing about whether you watched anything.
+
+On a row that also carries Continue Watching, both modes keep any episode past the mark,
+so the thing you are genuinely part-way through never disappears.
 - **Over-fetch multiplier** — how much longer a row to ask the server for so it is still
   full after filtering (default 3; 1 disables it).
 - **Over-fetch ceiling** — upper bound on that inflated length (default 150).
@@ -94,6 +98,22 @@ Dashboard → Plugins → Next Up Cleanup.
 - **Episodes per series** — how many episodes of one series may stay (default 1).
 - **One entry per movie** (default off) — only matters when the same film is in the
   library more than once.
+- **Reset episodes under (minutes)** — the mark used by the scheduled task below
+  (default 2).
+
+## Resetting abandoned episodes
+
+Filtering hides barely-started episodes without touching anything. If you also want the
+stale play state *gone*, there is a scheduled task — **Dashboard → Scheduled Tasks →
+Reset abandoned episodes**.
+
+It clears the resume position, play count and play date of any episode stopped before the
+reset mark. Episodes **marked played are never touched**, so a show you finished and
+restarted keeps its history.
+
+This is the only thing in the plugin that writes to the database, and it **cannot be
+undone**. It therefore has no default trigger and never runs on its own — you start it by
+hand, or give it a trigger yourself if you want it periodic.
 
 ## Installation
 

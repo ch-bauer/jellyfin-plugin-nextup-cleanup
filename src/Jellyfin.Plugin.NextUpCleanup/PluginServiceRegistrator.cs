@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.NextUpCleanup.Filtering;
+using Jellyfin.Plugin.NextUpCleanup.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<NextUpActionFilter>();
+
+        // The server discovers IScheduledTask across plugin assemblies itself; registering
+        // the type is what lets it be constructed with its dependencies.
+        serviceCollection.AddTransient<ResetAbandonedEpisodesTask>();
 
         // A global MVC filter, so it sees every controller the server dispatches to —
         // Jellyfin's own and those that plugins add, which is how rows built by the Home

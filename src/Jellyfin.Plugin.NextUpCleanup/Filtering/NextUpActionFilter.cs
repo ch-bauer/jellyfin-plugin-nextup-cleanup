@@ -100,7 +100,7 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
         var kept = new List<BaseItemDto>(items.Count);
         foreach (var item in items)
         {
-            if (!NextUpFilter.ShouldHide(item, config.Mode, kind))
+            if (!NextUpFilter.ShouldHide(item, config, kind))
             {
                 kept.Add(item);
             }

@@ -23,14 +23,14 @@ public class NextUpFilterTests
     [InlineData(1, 12, false)]
     [InlineData(2, 1, false)] // S02E01 means you finished season one
     public void HidesOnlyTheFirstEpisodeOfTheFirstSeason(int season, int number, bool hidden)
-        => Assert.Equal(hidden, NextUpFilter.ShouldHide(Episode(season, number), FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
+        => Assert.Equal(hidden, NextUpFilter.ShouldHide(Episode(season, number), Config(FilterMode.AllFirstEpisodes), EndpointKind.NextUp));
 
     [Fact]
     public void LeavesNonEpisodesAlone()
     {
         var movie = new BaseItemDto { Type = BaseItemKind.Movie, ParentIndexNumber = 1, IndexNumber = 1 };
 
-        Assert.False(NextUpFilter.ShouldHide(movie, FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
+        Assert.False(NextUpFilter.ShouldHide(movie, Config(FilterMode.AllFirstEpisodes), EndpointKind.NextUp));
     }
 
     [Fact]
@@ -38,20 +38,32 @@ public class NextUpFilterTests
     {
         var unnumbered = new BaseItemDto { Type = BaseItemKind.Episode };
 
-        Assert.False(NextUpFilter.ShouldHide(unnumbered, FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
+        Assert.False(NextUpFilter.ShouldHide(unnumbered, Config(FilterMode.AllFirstEpisodes), EndpointKind.NextUp));
     }
 
     [Fact]
-    public void AllMode_HidesAFirstEpisodeEvenWhenItHasPlayState()
-        => Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched(ticks: 123456)), FilterMode.AllFirstEpisodes, EndpointKind.NextUp));
+    public void AllMode_HidesAFirstEpisodeEvenWhenYouAreWellIntoIt()
+        => Assert.True(NextUpFilter.ShouldHide(
+            Episode(1, 1, Watched(ticks: Minutes(22))),
+            Config(FilterMode.AllFirstEpisodes),
+            EndpointKind.NextUp));
 
-    public static TheoryData<UserItemDataDto> PlayState => new()
+    // What counts as having watched a first episode, and what only looks like it.
+    public static TheoryData<UserItemDataDto, bool> PlayState => new()
     {
-        Watched(ticks: 123456),
-        Watched(playCount: 1),
-        Watched(played: true),
-        Watched(lastPlayed: new DateTime(2026, 7, 1, 20, 0, 0, DateTimeKind.Utc))
+        { Watched(ticks: Minutes(20)), true },                                          // well into it
+        { Watched(ticks: Minutes(5)), true },                                           // exactly at the threshold
+        { Watched(played: true), true },                                                // finished it
+        { Watched(ticks: Minutes(0.02)), false },                                       // a second in
+        { Watched(ticks: Minutes(2)), false },                                          // under the threshold
+        { Watched(playCount: 1), false },                                               // pressed play once
+        { Watched(lastPlayed: new DateTime(2026, 7, 1, 20, 0, 0, DateTimeKind.Utc)), false }
     };
+
+    private static PluginConfiguration Config(FilterMode mode, int startedMinutes = 5)
+        => new() { Mode = mode, StartedWatchingMinutes = startedMinutes };
+
+    private static long Minutes(double count) => (long)(count * TimeSpan.TicksPerMinute);
 
     private static UserItemDataDto Watched(
         long ticks = 0,
@@ -69,14 +81,16 @@ public class NextUpFilterTests
 
     [Theory]
     [MemberData(nameof(PlayState))]
-    public void UntouchedMode_KeepsAFirstEpisodeWithPlayState(UserItemDataDto userData)
-        => Assert.False(NextUpFilter.ShouldHide(Episode(1, 1, userData), FilterMode.UntouchedFirstEpisodes, EndpointKind.NextUp));
+    public void UntouchedMode_KeepsOnlyAFirstEpisodeYouActuallyWatched(UserItemDataDto userData, bool watched)
+        => Assert.Equal(
+            !watched,
+            NextUpFilter.ShouldHide(Episode(1, 1, userData), Config(FilterMode.UntouchedFirstEpisodes), EndpointKind.NextUp));
 
     [Fact]
     public void UntouchedMode_HidesAFirstEpisodeWithoutPlayState()
     {
-        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched()), FilterMode.UntouchedFirstEpisodes, EndpointKind.NextUp));
-        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1), FilterMode.UntouchedFirstEpisodes, EndpointKind.NextUp));
+        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1, Watched()), Config(FilterMode.UntouchedFirstEpisodes), EndpointKind.NextUp));
+        Assert.True(NextUpFilter.ShouldHide(Episode(1, 1), Config(FilterMode.UntouchedFirstEpisodes), EndpointKind.NextUp));
     }
 
     [Theory]
@@ -226,10 +240,10 @@ public class NextUpFilterTests
     internal void ACombinedRowKeepsAnEpisodeYouArePartWayThrough()
     {
         // The one guarantee a Continue Watching row has to make, in either mode.
-        var resuming = Episode(1, 1, Watched(ticks: 5_000_000, playCount: 1));
+        var resuming = Episode(1, 1, Watched(ticks: Minutes(22), playCount: 1));
 
-        Assert.False(NextUpFilter.ShouldHide(resuming, FilterMode.AllFirstEpisodes, EndpointKind.Mixed));
-        Assert.False(NextUpFilter.ShouldHide(resuming, FilterMode.UntouchedFirstEpisodes, EndpointKind.Mixed));
+        Assert.False(NextUpFilter.ShouldHide(resuming, Config(FilterMode.AllFirstEpisodes), EndpointKind.Mixed));
+        Assert.False(NextUpFilter.ShouldHide(resuming, Config(FilterMode.UntouchedFirstEpisodes), EndpointKind.Mixed));
     }
 
     [Fact]
@@ -242,24 +256,63 @@ public class NextUpFilterTests
             playCount: 1,
             lastPlayed: new DateTime(2026, 8, 11, 15, 27, 31, DateTimeKind.Utc)));
 
-        Assert.True(NextUpFilter.ShouldHide(abandoned, FilterMode.AllFirstEpisodes, EndpointKind.Mixed));
+        Assert.True(NextUpFilter.ShouldHide(abandoned, Config(FilterMode.AllFirstEpisodes), EndpointKind.Mixed));
 
         // A watched-through rewatch suggestion is the same story.
         Assert.True(NextUpFilter.ShouldHide(
             Episode(1, 1, Watched(playCount: 3, played: true)),
-            FilterMode.AllFirstEpisodes,
+            Config(FilterMode.AllFirstEpisodes),
+            EndpointKind.Mixed));
+    }
+
+    [Theory]
+    // Under the threshold: a mis-tap or a look at the titles. Not worth continuing, so
+    // it goes, on a combined row and in the narrower mode alike.
+    [InlineData(0.5, true)]
+    [InlineData(2, true)]
+    [InlineData(4.9, true)]
+    // Past it: genuinely part-way through, and kept.
+    [InlineData(5, false)]
+    [InlineData(31, false)]
+    internal void AResumePositionOnlyCountsPastTheThreshold(double minutesIn, bool hidden)
+    {
+        var item = Episode(1, 1, Watched(ticks: Minutes(minutesIn), playCount: 1));
+
+        Assert.Equal(hidden, NextUpFilter.ShouldHide(item, Config(FilterMode.AllFirstEpisodes), EndpointKind.Mixed));
+        Assert.Equal(hidden, NextUpFilter.ShouldHide(item, Config(FilterMode.UntouchedFirstEpisodes), EndpointKind.Mixed));
+        Assert.Equal(!hidden, NextUpFilter.HasStartedWatching(item, Config(FilterMode.AllFirstEpisodes)));
+    }
+
+    [Fact]
+    internal void TheThresholdIsConfigurable()
+    {
+        var item = Episode(1, 1, Watched(ticks: Minutes(3)));
+
+        Assert.True(NextUpFilter.ShouldHide(item, Config(FilterMode.AllFirstEpisodes, 5), EndpointKind.Mixed));
+        Assert.False(NextUpFilter.ShouldHide(item, Config(FilterMode.AllFirstEpisodes, 2), EndpointKind.Mixed));
+
+        // 0 puts the floor back on the ground: any position at all counts.
+        Assert.False(NextUpFilter.ShouldHide(
+            Episode(1, 1, Watched(ticks: 1)),
+            Config(FilterMode.AllFirstEpisodes, 0),
             EndpointKind.Mixed));
     }
 
     [Fact]
-    internal void UntouchedModeStillProtectsPlayStateOnACombinedRow()
+    internal void APlayCountAloneIsNotStartedWatching()
     {
-        // The configured mode keeps meaning what the setting says it means; the combined
-        // row only ever adds the resume-position guarantee on top.
-        Assert.False(NextUpFilter.ShouldHide(
-            Episode(1, 1, Watched(playCount: 1)),
-            FilterMode.UntouchedFirstEpisodes,
-            EndpointKind.Mixed));
+        // Jellyfin writes a play count and a play date the instant playback begins, so
+        // neither says anything about whether the episode was actually watched.
+        var pressedOnce = Episode(1, 1, Watched(
+            playCount: 1,
+            lastPlayed: new DateTime(2026, 8, 11, 15, 27, 31, DateTimeKind.Utc)));
+
+        Assert.False(NextUpFilter.HasStartedWatching(pressedOnce, Config(FilterMode.AllFirstEpisodes)));
+
+        // Marked played is the exception: that is a finished episode, not a stray tap.
+        Assert.True(NextUpFilter.HasStartedWatching(
+            Episode(1, 1, Watched(played: true)),
+            Config(FilterMode.AllFirstEpisodes)));
     }
 
     [Theory]

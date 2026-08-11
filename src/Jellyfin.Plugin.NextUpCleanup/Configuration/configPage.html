@@ -41,15 +41,26 @@
                         <em>Every first episode</em> removes all S01E01 entries, without exception.
                         This is the one that empties the row.
                         <br /><br />
-                        <em>Only untouched</em> is narrower: it keeps any S01E01 you have ever
-                        touched, meaning it has a resume position, a play count, a played flag
-                        or a played date &mdash; so an episode you started once and abandoned,
-                        or finished and are being offered again, stays in the row. Only entries
-                        with none of those four are removed.
+                        <em>Only untouched</em> is narrower: it keeps an S01E01 you have actually
+                        watched &mdash; one that is marked played, or that you got past the
+                        &ldquo;started watching&rdquo; mark below in. Everything else goes.
                         <br /><br />
-                        Either way, on a row that also carries Continue Watching, an episode
-                        with a resume position is never removed &mdash; you never lose the thing
-                        you are part-way through.
+                        Either way, on a row that also carries Continue Watching, an episode you
+                        are genuinely part-way through is never removed.
+                    </div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="StartedWatchingMinutes">
+                        Started watching after (minutes)
+                    </label>
+                    <input is="emby-input" type="number" id="StartedWatchingMinutes" min="0" max="120" />
+                    <div class="fieldDescription">
+                        Jellyfin writes a resume position, a play count and a play date the moment
+                        playback starts, so a mis-tap or a look at the opening titles is enough to
+                        pin an episode to the row for good. Below this many minutes an episode
+                        counts as never started &mdash; there is nothing there worth continuing.
+                        0 means any resume position at all counts.
                     </div>
                 </div>
 
@@ -113,6 +124,27 @@
                     </div>
                 </div>
 
+                <h3>Abandoned episodes</h3>
+                <p style="opacity:0.8;">
+                    Filtering already keeps barely-started episodes out of every row. This is
+                    for tidying up what sits behind them, in
+                    <strong>Dashboard &rarr; Scheduled Tasks &rarr; Reset abandoned episodes</strong>.
+                    That task <strong>deletes watch data and cannot be undone</strong>, so it
+                    never runs on its own &mdash; you have to start it by hand.
+                </p>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="ResetBelowMinutes">
+                        Reset episodes under (minutes)
+                    </label>
+                    <input is="emby-input" type="number" id="ResetBelowMinutes" min="1" max="120" />
+                    <div class="fieldDescription">
+                        The task clears the resume position, play count and play date of any
+                        episode stopped before this mark. Episodes marked played are never
+                        touched. Keep this well below the &ldquo;started watching&rdquo; mark.
+                    </div>
+                </div>
+
                 <div>
                     <button is="emby-button" type="submit" class="raised button-submit block">
                         <span>Save</span>
@@ -143,6 +175,9 @@
                 ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
                     page.querySelector('#Enabled').checked = config.Enabled !== false;
                     page.querySelector('#Mode').value = modeName(config.Mode);
+                    page.querySelector('#StartedWatchingMinutes').value =
+                        config.StartedWatchingMinutes === undefined ? 5 : config.StartedWatchingMinutes;
+                    page.querySelector('#ResetBelowMinutes').value = config.ResetBelowMinutes || 2;
                     page.querySelector('#OverfetchMultiplier').value = config.OverfetchMultiplier || 3;
                     page.querySelector('#MaxOverfetchLimit').value = config.MaxOverfetchLimit || 150;
                     page.querySelector('#DeduplicateSeries').checked = config.DeduplicateSeries !== false;
@@ -160,6 +195,9 @@
                 ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
                     config.Enabled = page.querySelector('#Enabled').checked;
                     config.Mode = modeName(page.querySelector('#Mode').value);
+                    config.StartedWatchingMinutes =
+                        Math.max(0, parseInt(page.querySelector('#StartedWatchingMinutes').value, 10) || 0);
+                    config.ResetBelowMinutes = parseInt(page.querySelector('#ResetBelowMinutes').value, 10) || 2;
                     config.OverfetchMultiplier = parseInt(page.querySelector('#OverfetchMultiplier').value, 10) || 1;
                     config.MaxOverfetchLimit = parseInt(page.querySelector('#MaxOverfetchLimit').value, 10) || 150;
                     config.DeduplicateSeries = page.querySelector('#DeduplicateSeries').checked;

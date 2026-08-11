@@ -99,7 +99,7 @@ internal static class NextUpFilter
     /// What kind of row this is. A row that also carries Continue Watching entries gets
     /// the resume-position guarantee below.
     /// </param>
-    public static bool ShouldHide(BaseItemDto item, FilterMode mode, EndpointKind kind)
+    public static bool ShouldHide(BaseItemDto item, PluginConfiguration config, EndpointKind kind)
     {
         if (item.Type != BaseItemKind.Episode)
         {
@@ -112,24 +112,41 @@ internal static class NextUpFilter
         }
 
         // An episode you are genuinely part-way through is never taken out of a row that
-        // carries Continue Watching, whichever mode is configured. A resume position is
-        // what "part-way through" means, and it is the only thing that means it: a play
-        // count or a play date with no position on it says the opposite — that the episode
-        // was finished, or started and abandoned, and Jellyfin is offering it again.
-        if (kind == EndpointKind.Mixed && IsResumable(item))
+        // carries Continue Watching, whichever mode is configured.
+        if (kind == EndpointKind.Mixed && HasResumePosition(item, config))
         {
             return false;
         }
 
-        return mode switch
+        return config.Mode switch
         {
-            FilterMode.UntouchedFirstEpisodes => !HasPlayState(item),
+            FilterMode.UntouchedFirstEpisodes => !HasStartedWatching(item, config),
             _ => true
         };
     }
 
-    private static bool IsResumable(BaseItemDto item)
-        => item.UserData?.PlaybackPositionTicks > 0;
+    /// <summary>
+    /// True when there is a resume position far enough in to be worth carrying on from.
+    /// <para>
+    /// Jellyfin stamps a resume position, a play count and a play date the moment playback
+    /// starts, so without a floor under it a mis-tap, an auto-play that was stopped, or a
+    /// look at the opening titles pins an episode to the row forever. A position under the
+    /// threshold is treated as never having started — there is nothing there worth
+    /// continuing.
+    /// </para>
+    /// </summary>
+    private static bool HasResumePosition(BaseItemDto item, PluginConfiguration config)
+    {
+        var ticks = item.UserData?.PlaybackPositionTicks ?? 0;
+
+        return ticks > 0 && ticks >= StartedTicks(config);
+    }
+
+    /// <summary>
+    /// The playback position at which an episode counts as started.
+    /// </summary>
+    public static long StartedTicks(PluginConfiguration config)
+        => Math.Max(0, config.StartedWatchingMinutes) * TimeSpan.TicksPerMinute;
 
     /// <summary>
     /// Collapses a show that appears several times in the row down to the episode you
@@ -241,18 +258,25 @@ internal static class NextUpFilter
     }
 
     /// <summary>
-    /// True if the user has any relationship with this episode at all: a resume
-    /// position, a play count, a played flag, or a recorded play date.
+    /// True if the user has actually watched this episode, as opposed to having merely
+    /// touched it.
+    /// <para>
+    /// Only two things count: it is marked played, or it has a resume position past the
+    /// threshold. A play count and a play date deliberately do not, because Jellyfin
+    /// writes both the instant playback starts — so treating them as evidence made every
+    /// episode anybody ever pressed play on look like one you are in the middle of, which
+    /// is the whole reason a first episode could not be got rid of.
+    /// </para>
     /// </summary>
-    private static bool HasPlayState(BaseItemDto item)
+    public static bool HasStartedWatching(BaseItemDto item, PluginConfiguration config)
     {
         var userData = item.UserData;
+        if (userData is null)
+        {
+            return false;
+        }
 
-        return userData is not null
-            && (userData.PlaybackPositionTicks > 0
-                || userData.PlayCount > 0
-                || userData.Played
-                || userData.LastPlayedDate is not null);
+        return userData.Played || HasResumePosition(item, config);
     }
 
     private static bool Is(string value, string expected)

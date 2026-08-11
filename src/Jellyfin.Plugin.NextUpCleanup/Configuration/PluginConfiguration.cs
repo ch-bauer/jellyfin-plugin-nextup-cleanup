@@ -48,6 +48,22 @@ public class PluginConfiguration : BasePluginConfiguration
     public int MaxOverfetchLimit { get; set; } = 150;
 
     /// <summary>
+    /// How many minutes of an episode have to have been played before it counts as
+    /// started. Below this, a resume position is a stray tap or a look at the first
+    /// minute — not something worth carrying on with, and not a reason to keep the
+    /// episode in a row. 0 makes any resume position at all count.
+    /// </summary>
+    public int StartedWatchingMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// The mark used by the <c>Reset abandoned episodes</c> scheduled task: an episode
+    /// whose resume position is under this many minutes has its play state cleared.
+    /// Separate from <see cref="StartedWatchingMinutes"/>, and lower, because this one
+    /// deletes data rather than hiding a row entry.
+    /// </summary>
+    public int ResetBelowMinutes { get; set; } = 2;
+
+    /// <summary>
     /// Collapse a series that has several part-way-through episodes in the row
     /// down to its most recently played one. Jellyfin lists every episode with
     /// progress, so skipping around in one show can fill the row with it.

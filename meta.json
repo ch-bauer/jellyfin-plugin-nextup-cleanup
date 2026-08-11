@@ -1,6 +1,6 @@
 {
   "category": "General",
-  "changelog": "Two fixes for a first episode surviving in a merged Continue Watching / Next Up row. Such a row is protected from losing an episode you are part-way through, but that protection was reading any play state at all as \"part-way through\" - so an S01E01 with a play count and a play date but no resume position stayed put, which is precisely the entry the row should not have. Only a resume position counts now: an episode you actually paused is still never removed, while one that was finished, or started and abandoned, is. Separately, the What to hide setting rendered blank after saving and silently reset itself on the next save, because the page offered the mode as a number while the server returns its name.",
+  "changelog": "Adds a threshold under which an episode counts as never started. Jellyfin writes a resume position, a play count and a play date on the very first frame, so a mis-tap or a stopped auto-play was enough to pin an episode to a row for good. An episode now counts as watched only if it is marked played or its resume position is past the mark - five minutes by default, configurable. A bare play count or play date no longer counts for anything. Also new: an opt-in Reset abandoned episodes scheduled task that clears the play state of episodes stopped before a second, lower mark (two minutes by default), for tidying the database behind the rows. It skips anything marked played, deletes watch data, cannot be undone, and never runs unless you start it by hand.",
   "description": "Clears the first episodes of never-started series out of Next Up and collapses duplicate episodes of one series in Continue Watching, so both rows only hold shows you are actually watching. Filters the server's response, changes no watch data.",
   "guid": "64c04809-0078-401f-a883-2fc0fddace8c",
   "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
@@ -8,8 +8,8 @@
   "overview": "Next Up without the first episode of every show you never started, and Continue Watching without the same show four times.",
   "owner": "Christian",
   "targetAbi": "10.11.0.0",
-  "timestamp": "2026-08-11T16:00:00.000Z",
-  "version": "1.1.0.1",
+  "timestamp": "2026-08-11T16:30:00.000Z",
+  "version": "1.2.0.0",
   "status": "Active",
   "autoUpdate": false
 }
