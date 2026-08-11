@@ -15,6 +15,13 @@ public sealed class SeriesExclusionStore
     private readonly object _gate = new();
     private HashSet<(Guid User, Guid Series)>? _excluded;
 
+    // The configuration object the cache was built from. Saving from the dashboard hands
+    // back a whole new object rather than mutating this one, so comparing the reference is
+    // what tells the cache it is looking at stale data. Checking it beats subscribing to a
+    // change event: there is nothing to wire up, nothing to unsubscribe, and no window
+    // between the plugin being constructed and the subscription being made.
+    private PluginConfiguration? _builtFrom;
+
     /// <summary>
     /// True if this user has switched this series off. False for an empty series id, so
     /// an entry Jellyfin gave no series for is never mistaken for an excluded one.
@@ -108,35 +115,37 @@ public sealed class SeriesExclusionStore
     }
 
     /// <summary>
-    /// Drops the in-memory set, so the next read rebuilds it from configuration. Called
-    /// when the configuration is replaced from outside this store — a save from the
-    /// dashboard page hands back a whole new object.
+    /// Drops the in-memory set, so the next read rebuilds it from configuration.
     /// </summary>
     public void Invalidate()
     {
         lock (_gate)
         {
             _excluded = null;
+            _builtFrom = null;
         }
     }
 
     private void Save()
     {
         _excluded = null;
+        _builtFrom = null;
         Plugin.Instance?.SaveConfiguration();
     }
 
     private HashSet<(Guid, Guid)> Snapshot()
     {
-        if (_excluded is not null)
+        var config = Plugin.Instance?.Configuration;
+
+        if (_excluded is not null && ReferenceEquals(config, _builtFrom))
         {
             return _excluded;
         }
 
-        var config = Plugin.Instance?.Configuration;
         _excluded = config is null
             ? new HashSet<(Guid, Guid)>()
             : config.ExcludedSeries.Select(e => (e.UserId, e.SeriesId)).ToHashSet();
+        _builtFrom = config;
 
         return _excluded;
     }
