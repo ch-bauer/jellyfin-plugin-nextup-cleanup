@@ -120,8 +120,17 @@ the user from the request's own token, so switching a series off never changes w
 else sees.
 
 The button comes from a small script added to the web client's `index.html` at request
-time, by middleware — the same approach Jellyfin Enhanced uses. Nothing is written into
-the web folder, so a jellyfin-web update cannot wipe it, and no other plugin is required.
+time, by middleware registered as a singleton `IStartupFilter` — the same mechanism
+Jellyfin Enhanced uses, down to stripping `Accept-Encoding` so the static handler yields a
+body that can be rewritten. Nothing is written into the web folder, so a jellyfin-web
+update cannot wipe it, and no other plugin is required.
+
+It goes in among the other detail buttons and ahead of the overflow (**More**) button —
+and ahead of Jellyfin Enhanced's buttons too. That last part matters: Jellyfin Enhanced's
+Spoiler Guard button re-claims the slot *directly* before **More** on every one of its
+ticks, so a second button insisting on the same slot ends up trading places with it
+several times a second. Anchoring ahead of it leaves that invariant satisfied, so both
+settle immediately, for any combination of Jellyfin Enhanced's options.
 
 Turning **Show the toggle on series pages** off stops the script being added; series
 already switched off stay switched off, since the filtering is server-side and does not
@@ -175,6 +184,31 @@ hid 1 first episode(s), collapsed 2 duplicate(s), trimmed 0 over-fetched, 1 out
   `NextUpFilter.cs`. The plugin checks every action it does not handle, so an unknown row
   endpoint names itself. Note this looks for first episodes only, not duplicates.
 - **No line at all** — the plugin is not loaded, or filtering is switched off.
+
+## `/web/index.html` returns a 500
+
+If the web client goes blank and the log has this, it is **not** this plugin, whatever was
+installed just before it:
+
+```
+Error processing request. URL "GET" "/web/index.html".
+System.ObjectDisposedException: Cannot access a disposed object. Object name: 'IServiceProvider'.
+   at Jellyfin.Plugin.FileTransformation.PluginInterface...RegisterTransformation...
+   at ...PhysicalTransformedFileProvider.GetFileInfo
+```
+
+File Transformation 2.5.11.0 resolves services *inside* the transformation callback, from
+the `ServiceProvider` its plugin captured at construction. Jellyfin's in-process restart —
+the one the dashboard's **Restart** button and a plugin install trigger, which finishes in
+about two seconds rather than the eight or nine a real start takes — leaves that provider
+disposed while File Transformation's own statics carry over, so every request for a file
+some plugin transforms throws. Any plugin that registers a transformation on `index.html`
+is then enough to take the web client down, and several do.
+
+[Upstream fixed exactly this](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation/commit/ac0360c1)
+on 15 June 2026, four days after 2.5.11.0 was published, so no release carries the fix yet.
+**Restart the Jellyfin process properly** — the service, container or tray app, not the
+dashboard button — and it comes back.
 
 ## Building
 

@@ -128,21 +128,35 @@
             });
     }
 
-    // Go in with the other detail buttons, ahead of the overflow ("More") button, which is
-    // where Jellyfin Enhanced puts its buttons too — but claim that position once and then
-    // never again. Re-asserting it on a timer is what makes two plugins shove each other
-    // aside several times a second; yielding the exact slot afterwards lets Jellyfin
-    // Enhanced settle wherever it likes, with any combination of its buttons enabled, and
-    // this one simply stays in the group.
-    function place(button, container) {
-        if (button.parentNode === container) {
-            return;
-        }
+    // Buttons Jellyfin Enhanced adds to the same group, in the order it settles them.
+    // Its Spoiler Guard button re-asserts the slot directly before the overflow ("More")
+    // button on every one of its ticks — `if (button.nextElementSibling !== moreButton)` —
+    // so anything else that also insists on that exact slot gets shoved aside and shoves
+    // back, several times a second. That was the flicker.
+    var JE_BUTTONS = ['.je-spoiler-blur-btn', '.je-detail-hide-btn'];
 
-        var more = container.querySelector('.btnMoreCommands');
-        if (more) {
-            container.insertBefore(button, more);
-        } else {
+    // Go in with the other detail buttons, ahead of "More" — but ahead of Jellyfin
+    // Enhanced's buttons as well, never in the slot its Spoiler Guard button wants. Its
+    // invariant then holds for good and it stops moving, while this one still sits inside
+    // the group rather than past the overflow menu. The anchor is whichever of those
+    // buttons is actually there, so every combination of Jellyfin Enhanced's options —
+    // both buttons, either one, neither — lands the same way.
+    function anchorFor(container) {
+        var candidates = container.querySelectorAll(JE_BUTTONS.concat(['.btnMoreCommands']).join(','));
+        return candidates.length ? candidates[0] : null;
+    }
+
+    // Idempotent, and re-checked on every tick: Jellyfin rebuilds this container when the
+    // detail page re-renders, so placing once is not enough. Moving only when the button
+    // is not already where it belongs is what keeps this from being a fight.
+    function place(button, container) {
+        var anchor = anchorFor(container);
+
+        if (anchor) {
+            if (button.nextElementSibling !== anchor) {
+                container.insertBefore(button, anchor);
+            }
+        } else if (button.parentNode !== container) {
             container.appendChild(button);
         }
     }
