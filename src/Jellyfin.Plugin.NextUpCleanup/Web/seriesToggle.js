@@ -128,13 +128,19 @@
             });
     }
 
+    // Position the button once and then leave it where it is. Insisting on a particular
+    // slot — "immediately before the ... button" — starts a fight with any other plugin
+    // that wants the same slot: each one shoves the other aside on its own timer and both
+    // buttons flicker. Being in the right container is all that actually matters.
     function place(button, container) {
+        if (button.parentNode === container) {
+            return;
+        }
+
         var more = container.querySelector('.btnMoreCommands');
         if (more) {
-            if (button.nextElementSibling !== more) {
-                container.insertBefore(button, more);
-            }
-        } else if (button.parentNode !== container) {
+            container.insertBefore(button, more);
+        } else {
             container.appendChild(button);
         }
     }

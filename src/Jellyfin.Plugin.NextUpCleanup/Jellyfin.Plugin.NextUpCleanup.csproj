@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.NextUpCleanup</RootNamespace>
-    <AssemblyVersion>1.3.0.2</AssemblyVersion>
-    <FileVersion>1.3.0.2</FileVersion>
+    <AssemblyVersion>1.3.0.3</AssemblyVersion>
+    <FileVersion>1.3.0.3</FileVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>

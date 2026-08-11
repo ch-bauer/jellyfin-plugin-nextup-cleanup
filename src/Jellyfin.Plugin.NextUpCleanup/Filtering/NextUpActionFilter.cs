@@ -29,6 +29,7 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
     private const string LimitKey = "limit";
     private const string StartIndexKey = "startIndex";
     private const string SectionTypeKey = "sectionType";
+    private const string UserIdKey = "userId";
 
     private static readonly TimeSpan WarnInterval = TimeSpan.FromHours(1);
     private static readonly ConcurrentDictionary<string, DateTime> _warnedAt = new(StringComparer.OrdinalIgnoreCase);
@@ -241,15 +242,44 @@ internal sealed class NextUpActionFilter : IAsyncActionFilter
     }
 
     /// <summary>
-    /// The user this request was authenticated as. Exclusions are per user, so a row is
-    /// filtered against whoever asked for it.
+    /// Whose row this is. Exclusions are per user, so the row has to be filtered against
+    /// the user it was built for.
+    /// <para>
+    /// That is the <c>userId</c> the endpoint was called with, when it takes one — an
+    /// administrator or an API key can ask for somebody else's row, and it is that
+    /// person's list of switched-off series that belongs on it, not the caller's. Only
+    /// when the endpoint carries no user does this fall back to the token the request was
+    /// authenticated with.
+    /// </para>
     /// </summary>
     private static Guid CurrentUserId(ActionExecutingContext context)
     {
-        var value = context.HttpContext.User.Claims
+        if (context.ActionArguments.TryGetValue(UserIdKey, out var argument))
+        {
+            if (argument is Guid fromArgument && fromArgument != Guid.Empty)
+            {
+                return fromArgument;
+            }
+
+            if (argument is string text && Guid.TryParse(text, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        foreach (var pair in context.HttpContext.Request.Query)
+        {
+            if (pair.Key.Equals(UserIdKey, StringComparison.OrdinalIgnoreCase)
+                && Guid.TryParse(pair.Value.ToString(), out var fromQuery))
+            {
+                return fromQuery;
+            }
+        }
+
+        var claim = context.HttpContext.User.Claims
             .FirstOrDefault(c => c.Type.Equals("Jellyfin-UserId", StringComparison.OrdinalIgnoreCase))?.Value;
 
-        return Guid.TryParse(value, out var userId) ? userId : Guid.Empty;
+        return Guid.TryParse(claim, out var userId) ? userId : Guid.Empty;
     }
 
     private static string? SectionType(ActionExecutingContext context)
