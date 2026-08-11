@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ch-bauer/jellyfin-plugin-nextup-cleanup/main/images/icon.png",
     "versions": [
       {
+        "version": "1.2.0.0",
+        "changelog": "Adds a threshold under which an episode counts as never started. Jellyfin writes a resume position, a play count and a play date on the very first frame, so a mis-tap or a stopped auto-play was enough to pin an episode to a row for good. An episode now counts as watched only if it is marked played or its resume position is past the mark - five minutes by default, configurable. A bare play count or play date no longer counts for anything. Also new: an opt-in Reset abandoned episodes scheduled task that clears the play state of episodes stopped before a second, lower mark (two minutes by default), for tidying the database behind the rows. It skips anything marked played, deletes watch data, cannot be undone, and never runs unless you start it by hand.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/ch-bauer/jellyfin-plugin-nextup-cleanup/releases/download/v1.2.0.0/nextup-cleanup_1.2.0.0.zip",
+        "checksum": "40e8c69f48d55cb847abbf1bf9137bc8",
+        "timestamp": "2026-08-11T16:30:00Z"
+      },
+      {
         "version": "1.1.0.1",
         "changelog": "Two fixes for a first episode surviving in a merged Continue Watching / Next Up row. Such a row is protected from losing an episode you are part-way through, but that protection was reading any play state at all as \"part-way through\" - so an S01E01 with a play count and a play date but no resume position stayed put, which is precisely the entry the row should not have. Only a resume position counts now: an episode you actually paused is still never removed, while one that was finished, or started and abandoned, is. Separately, the What to hide setting rendered blank after saving and silently reset itself on the next save, because the page offered the mode as a number while the server returns its name.",
         "targetAbi": "10.11.0.0",
