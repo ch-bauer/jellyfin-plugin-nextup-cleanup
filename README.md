@@ -3,6 +3,16 @@
   <h1>Next Up Cleanup for Jellyfin (Proof of Concept)</h1>
 </div>
 
+> [!CAUTION]
+> **This is a proof of concept, written with AI.** It is purely for testing, and there are
+> many items that are known to be incorrect or broken. It is not advisable to use this on a
+> non-test server.
+>
+> For this reason it is offered as is, with **no guarantee of support, bug fixes, or
+> troubleshooting**.
+>
+> **It is NOT recommended to fork or build on top of this plugin!**
+
 Clears the first episodes of series you never started out of the **Next Up** row, and
 collapses a show that fills **Continue Watching** with half-finished episodes down to
 the one you are actually on — so both rows hold what you are watching again, on **every
